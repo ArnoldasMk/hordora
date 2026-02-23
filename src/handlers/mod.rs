@@ -3,7 +3,7 @@ pub mod xdg_shell;
 
 use crate::state::DriftWm;
 use smithay::{
-    delegate_data_device, delegate_output,
+    delegate_cursor_shape, delegate_data_device, delegate_output,
     delegate_seat,
     input::{Seat, SeatHandler, SeatState, pointer::CursorImageStatus},
     reexports::wayland_server::protocol::wl_surface::WlSurface,
@@ -15,6 +15,7 @@ use smithay::{
             },
             SelectionHandler,
         },
+        tablet_manager::TabletSeatHandler,
     },
 };
 
@@ -29,7 +30,14 @@ impl SeatHandler for DriftWm {
         &mut self.seat_state
     }
 
-    fn cursor_image(&mut self, _seat: &Seat<Self>, _image: CursorImageStatus) {}
+    fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
+        // During a compositor grab (pan, resize), we control the cursor.
+        // Ignore client updates so they don't stomp our grab cursor.
+        if self.grab_cursor {
+            return;
+        }
+        self.cursor_status = image;
+    }
 
     fn focus_changed(&mut self, _seat: &Seat<Self>, _focused: Option<&Self::KeyboardFocus>) {}
 }
@@ -60,3 +68,11 @@ delegate_data_device!(DriftWm);
 impl OutputHandler for DriftWm {}
 
 delegate_output!(DriftWm);
+
+// --- TabletSeatHandler (required by cursor_shape) ---
+
+impl TabletSeatHandler for DriftWm {}
+
+// --- CursorShapeManager ---
+
+delegate_cursor_shape!(DriftWm);

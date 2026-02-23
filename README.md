@@ -5,7 +5,7 @@ A trackpad-first infinite canvas Wayland compositor.
 Windows float on an unbounded 2D plane. You pan, zoom, and navigate with
 trackpad gestures. No workspaces, no tiling — just drift.
 
-Built on [smithay](https://github.com/Smithay/smithay).
+Inspired by [vxwm](https://codeberg.org/wh1tepearl/vxwm). Built on [smithay](https://github.com/Smithay/smithay).
 
 ## How it works
 
@@ -29,12 +29,12 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the full specification.
 
 ## Status
 
-Early development. Current milestone: **2 — Move and resize** (complete).
+Early development. Current milestone: **3 — Infinite canvas** (complete).
 
-The compositor opens a window via the winit backend, renders a dark background,
-accepts xdg-shell clients, and handles keyboard/pointer input. Windows can be
-moved and resized via Alt+click drag or CSD decorations (title bar / border
-drag). You can run terminals and GUI apps inside it.
+The compositor opens a window via the winit backend, renders xdg-shell clients
+on an infinite 2D canvas with viewport panning (scroll, click-drag, keyboard),
+scroll momentum with friction decay, and a compositor-rendered xcursor. Windows
+can be moved and resized via Alt+Shift+click drag or CSD decorations.
 
 ## Build & run
 
@@ -56,13 +56,17 @@ The socket name is printed at startup — use that if it differs from `wayland-1
 
 ## Keybinds
 
-| Shortcut             | Action                          |
-|----------------------|---------------------------------|
-| `Alt+Return`         | Open terminal                   |
-| `Alt+Q`              | Close window                    |
-| `Alt+Left-click`     | Drag to move window             |
-| `Alt+Right-click`    | Drag to resize window           |
-| `Super+Ctrl+Arrow`   | Nudge focused window by 20px    |
+| Shortcut               | Action                          |
+|------------------------|---------------------------------|
+| `Alt+Return`           | Open terminal                   |
+| `Alt+Q`                | Close window                    |
+| `Alt+Shift+Left-click` | Drag to move window             |
+| `Alt+Shift+Right-click`| Drag to resize window           |
+| `Alt+Left-click`       | Drag to pan canvas              |
+| `Alt+Shift+Arrow`      | Nudge focused window by 20px    |
+| `Alt+Ctrl+Arrow`       | Pan viewport by step            |
+| Scroll on empty canvas | Pan viewport (with momentum)    |
+| Click on empty canvas  | Drag to pan viewport            |
 
 CSD-initiated move/resize (title bar drag, border drag) also works.
 
@@ -85,7 +89,8 @@ src/
 ├── grabs/
 │   ├── mod.rs       # grab module re-exports
 │   ├── move_grab.rs # interactive window move (PointerGrab)
-│   └── resize_grab.rs # interactive window resize (PointerGrab)
+│   ├── resize_grab.rs # interactive window resize (PointerGrab)
+│   └── pan_grab.rs  # viewport pan via click-drag (PointerGrab)
 └── handlers/
     ├── mod.rs       # seat, data device, output delegates
     ├── compositor.rs # compositor + SHM handlers, resize commit logic
@@ -95,17 +100,18 @@ src/
 ## Milestones
 
 1. **Window appears** — winit backend, xdg-shell, terminal renders *(done)*
-2. **Move and resize** — drag/resize windows, Alt+click, CSD support *(done)*
-3. Infinite canvas — viewport panning
+2. **Move and resize** — drag/resize windows, CSD support *(done)*
+3. **Infinite canvas** — viewport panning, scroll momentum, xcursor rendering *(done)*
 4. Canvas background — shader dot-grid
-5. Trackpad gestures — libinput gesture events
-6. Zoom — GPU-scaled rendering, pinch to zoom
-7. Decorations — SSD fallback, resize grabs
-8. Default widgets — eww preset
-9. Multi-monitor — multiple viewports
-10. Layer shell — waybar, fuzzel, notifications
-11. XWayland — X11 app support
-12. Polish — animations, shadows, config file
+5. Zoom — GPU-scaled rendering, pinch to zoom
+6. Decorations — SSD fallback, resize grab zones
+7. Layer shell — waybar, fuzzel, notifications
+8. Config file — TOML parsing, user keybindings
+9. udev backend — DRM/KMS, libinput, session management
+10. Trackpad gestures — libinput gesture events, gesture state machine
+11. Multi-monitor — multiple viewports on same canvas
+12. XWayland — X11 app support
+13. Widgets + polish — eww preset, animations, shadows, damage optimization
 
 ## License
 

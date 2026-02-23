@@ -65,15 +65,16 @@ Monitor 0: viewport at (0, 0)       Monitor 1: viewport at (3000, 500)
 All gestures use libinput gesture events. Finger count + start location
 determines the action.
 
-| Fingers | Type      | Start on  | Action                                   |
-| ------- | --------- | --------- | ---------------------------------------- |
-| 2       | pan       | desktop   | Pan viewport (scroll the canvas)         |
-| 2       | pinch     | desktop   | Zoom out (bird's eye) / zoom in (to 1.0) |
-| 3       | pan       | on window | Move that window                         |
-| 3       | pinch     | on window | Toggle fullscreen                        |
+| Fingers | Type      | Start on  | Action                                             |
+| ------- | --------- | --------- | -------------------------------------------------- |
+| 2       | pan       | desktop   | Pan viewport (scroll the canvas)                   |
+| 2       | pinch     | desktop   | Zoom out (bird's eye) / zoom in (to 1.0)           |
+| 3       | pan       | on window | Move that window                                   |
+| 3+Super | pan       | on window | Resize that window                                 |
+| 3       | pinch     | on window | Toggle fullscreen                                  |
 | 4       | pan       | desktop   | Center nearest window in pan direction (see below) |
-| 4/5     | pinch-in  | anywhere  | Go home — snap viewport to (0, 0)        |
-| 4/5     | pinch-out | anywhere  | Return to previous position (undo home)  |
+| 4/5     | pinch-in  | anywhere  | Go home — snap viewport to (0, 0)                  |
+| 4/5     | pinch-out | anywhere  | Return to previous position (undo home)            |
 
 Note: 4-finger pinch is a toggle: pinch-in saves current `(cx, cy)` and snaps
 to `(0, 0)`. Pinch-out (or second pinch-in -- for compatibility with modifier+mouse) restores the saved position. Lets you peek at home
@@ -122,13 +123,14 @@ drag-and-drop UX pattern — familiar from every OS.
 
 For users without a trackpad, or for debugging:
 
-| Trackpad gesture             | Mouse + modifier equivalent   |
-| ---------------------------- | ----------------------------- |
-| 2-finger pan (viewport)      | Click-drag on empty canvas, or `Super` + right-click drag |
-| 3-finger pan (move win)      | `Super` + left-click drag     |
-| 2-finger pinch (zoom)        | `Super` + scroll wheel        |
-| 4-finger pan (center)        | `Super+Alt` + left-click drag |
-| 4-finger pinch (home toggle) | `Super` + middle-click        |
+| Trackpad gesture             | Mouse + modifier equivalent                                 |
+| ---------------------------- | ----------------------------------------------------------- |
+| 2-finger pan (viewport)      | Click-drag on empty canvas, or `Super` + left-drag anywhere |
+| 3-finger pan (move win)      | `Super+Shift` + left-drag                                   |
+| —                            | `Super+Shift` + right-drag → resize window                  |
+| 2-finger pinch (zoom)        | `Super` + scroll wheel                                      |
+| 4-finger pan (center)        | `Super+Ctrl` + left-drag                                    |
+| 4-finger pinch (home toggle) | `Super` + middle-click                                      |
 
 ## Keyboard shortcuts
 
@@ -136,14 +138,14 @@ Minimal set. Defaults below, all configurable via `[keybinds]` table (maps key c
 
 ### Window management
 
-| Shortcut        | Action                               |
-| --------------- | ------------------------------------ |
-| `Alt-Tab`       | Cycle windows forward (raise+center) |
-| `Alt-Shift-Tab` | Cycle windows backward               |
-| `Super+Q`       | Close focused window                 |
-| `Super+C`       | Center focused window in viewport    |
-| `Super+F`       | Toggle fullscreen                    |
-| `Super+Ctrl+Arrow` | Nudge focused window 20px in direction |
+| Shortcut            | Action                                 |
+| ------------------- | -------------------------------------- |
+| `Alt-Tab`           | Cycle windows forward (raise+center)   |
+| `Alt-Shift-Tab`     | Cycle windows backward                 |
+| `Super+Q`           | Close focused window                   |
+| `Super+C`           | Center focused window in viewport      |
+| `Super+F`           | Toggle fullscreen                      |
+| `Super+Shift+Arrow` | Nudge focused window 20px in direction |
 
 ### Navigation
 
@@ -155,17 +157,17 @@ Minimal set. Defaults below, all configurable via `[keybinds]` table (maps key c
 
 ### Viewport
 
-| Shortcut            | Action               |
-| ------------------- | -------------------- |
-| `Super+Shift+Arrow` | Pan viewport by step |
-| `Super+Plus`        | Zoom in              |
-| `Super+Minus`       | Zoom out             |
-| `Super+0`           | Reset zoom to 1.0    |
+| Shortcut           | Action               |
+| ------------------ | -------------------- |
+| `Super+Ctrl+Arrow` | Pan viewport by step |
+| `Super+Plus`       | Zoom in              |
+| `Super+Minus`      | Zoom out             |
+| `Super+0`          | Reset zoom to 1.0    |
 
 ### Launchers
 
-| Shortcut       | Action                 |
-| -------------- | ---------------------- |
+| Shortcut       | Action                     |
+| -------------- | -------------------------- |
 | `Super+Return` | Open terminal              |
 | `Super+D`      | Open launcher (bemenu-run) |
 | `Super+Space`  | Switch keyboard layout     |
@@ -334,6 +336,17 @@ repeat_rate = 25       # keys per second. default: 25
 repeat_delay = 300     # ms before repeat starts. default: 300
 ```
 
+### Scroll / canvas panning
+
+```toml
+[input.scroll]
+canvas_speed = 1.5     # multiplier for viewport pan deltas. default: 1.5
+friction = 0.96        # momentum decay per frame (0.90 = snappy, 0.98 = floaty). default: 0.96
+```
+
+Only affects viewport panning. Scroll events forwarded to windows use raw deltas
+(no multiplier, no momentum).
+
 ### Cursor
 
 ```toml
@@ -447,22 +460,33 @@ src/
 
 ## Milestones
 
+Ordered to maximize what can be developed in winit (nested) mode before
+requiring real hardware (udev/TTY). Milestones 1–8 work entirely in winit.
+
 1. **Window appears**: smithay winit backend, open a window, render a solid
-   background color. Accept xdg-shell clients. Display a terminal.
+   background color. Accept xdg-shell clients. Display a terminal. *(done)*
 2. **Move and resize**: drag windows with mouse, resize from edges. Basic
-   stacking (click to raise).
-3. **Infinite canvas**: implement viewport panning — click-drag on empty canvas,
-   scroll on empty canvas, and Super+right-drag anywhere.
-3b. **Cursor themes**: load xcursor theme, render compositor cursor, set shape
-   based on context (grab hand for move/pan, resize arrows for resize edges).
+   stacking (click to raise). *(done)*
+3. **Infinite canvas**: viewport panning (click-drag, scroll, keyboard),
+   scroll momentum with friction decay, xcursor theme loading, compositor-
+   rendered cursor. *(done)*
 4. **Canvas background**: shader and tiled image rendering with dot grid
    default. Essential spatial feedback for panning on an infinite canvas.
-5. **Trackpad gestures**: wire up libinput gesture events. 2-finger pan,
-   3-finger move.
-6. **Zoom**: GPU-scaled rendering at different zoom levels. Pinch to zoom.
-7. **Decorations**: SSD for apps that need it. Resize grab zones.
-8. **Default widgets**: ship eww preset (clock, battery, system stats).
-9. **Multi-monitor**: multiple viewports on same canvas.
-10. **Layer shell**: support waybar, fuzzel, mako, notifications.
-11. **XWayland**: run X11 apps (Firefox, Steam, etc).
-12. **Polish**: animations, shadows, damage tracking optimization, config file.
+5. **Zoom**: GPU-scaled rendering at different zoom levels. Keyboard and
+   mouse-scroll zoom (pinch-to-zoom comes with trackpad gestures).
+6. **Decorations**: SSD for apps that need it. Resize grab zones with
+   cursor shape changes on hover.
+7. **Layer shell**: support waybar, fuzzel, mako, notifications. Unlocks
+   proper app launcher and status bar.
+8. **Config file**: TOML parsing, user-defined keybindings, input settings.
+   Required before daily-driving.
+9. **udev backend**: DRM/KMS setup, libinput integration, logind session
+   management. The "run on real hardware" milestone.
+10. **Trackpad gestures**: wire up libinput gesture events. 2-finger pan,
+    3-finger move, pinch to zoom. Gesture state machine with conflict
+    resolution. Requires udev backend for direct libinput access.
+11. **Multi-monitor**: multiple viewports on same canvas. Independent
+    camera/zoom per output. Requires udev backend.
+12. **XWayland**: run X11 apps (Firefox, Steam, etc).
+13. **Widgets + polish**: ship eww preset, animations, shadows, damage
+    tracking optimization.

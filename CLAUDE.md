@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 driftwm — a trackpad-first infinite canvas Wayland compositor written in Rust. Windows float on an unbounded 2D plane navigated via trackpad gestures (pan, zoom, pinch). No workspaces, no tiling. Built on [smithay](https://github.com/Smithay/smithay).
 
-The project is in early development (milestone 2 complete). See `docs/DESIGN.md` for the full specification and `docs/CAVEATS.md` for architectural pitfalls.
+The project is in early development (milestone 3 complete). See `docs/DESIGN.md` for the full specification and `docs/CAVEATS.md` for architectural pitfalls.
 
 ## Conventions
 
@@ -33,11 +33,11 @@ The compositor uses a **camera/viewport** model: the screen is a viewport onto a
 Current source layout:
 
 - `state.rs` — DriftWm struct, CalloopData, ClientState
-- `config.rs` — keybindings, actions (SpawnCommand, CloseWindow, NudgeWindow), config
-- `winit.rs` — winit backend init + render loop (~60fps timer)
-- `input.rs` — keyboard/pointer handling, Alt+click move/resize, surface_under() hit-testing
-- `grabs/` — `move_grab.rs` (MoveSurfaceGrab), `resize_grab.rs` (ResizeSurfaceGrab, ResizeState)
-- `handlers/` — `compositor.rs` (commit, resize repositioning), `xdg_shell.rs` (CSD move/resize), `mod.rs` (seat, data device, output delegates)
+- `config.rs` — keybindings, actions (SpawnCommand, CloseWindow, NudgeWindow, PanViewport), config
+- `winit.rs` — winit backend init + render loop (~60fps timer), cursor element rendering
+- `input.rs` — keyboard/pointer handling, camera-offset pointer coords, scroll panning with momentum, surface_under() hit-testing
+- `grabs/` — `move_grab.rs` (MoveSurfaceGrab), `resize_grab.rs` (ResizeSurfaceGrab, ResizeState), `pan_grab.rs` (PanGrab for viewport panning)
+- `handlers/` — `compositor.rs` (commit, resize repositioning), `xdg_shell.rs` (CSD move/resize, window centering), `mod.rs` (seat, data device, output, cursor_shape delegates)
 
 Planned additions (from DESIGN.md):
 

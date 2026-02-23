@@ -15,6 +15,7 @@ pub enum Action {
     SpawnCommand(String),
     CloseWindow,
     NudgeWindow(Direction),
+    PanViewport(Direction),
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -25,19 +26,34 @@ pub struct Modifiers {
     pub logo: bool,
 }
 
+/// Which physical key acts as the window-manager modifier.
+/// Alt for dev (nested winit); Super for production (standalone on TTY).
+#[derive(Clone, Copy, Debug)]
+pub enum ModKey {
+    Alt,
+    Super,
+}
+
+impl ModKey {
+    /// Base modifier pattern with only the WM mod key set.
+    fn base(self) -> Modifiers {
+        match self {
+            ModKey::Alt => Modifiers { alt: true, ..Modifiers::EMPTY },
+            ModKey::Super => Modifiers { logo: true, ..Modifiers::EMPTY },
+        }
+    }
+
+    /// Check if this mod key is pressed in the given modifier state.
+    pub fn is_pressed(self, state: &ModifiersState) -> bool {
+        match self {
+            ModKey::Alt => state.alt,
+            ModKey::Super => state.logo,
+        }
+    }
+}
+
 impl Modifiers {
-    pub fn alt() -> Self {
-        Self { alt: true, ..Default::default() }
-    }
-
-    #[allow(dead_code)]
-    pub fn logo() -> Self {
-        Self { logo: true, ..Default::default() }
-    }
-
-    pub fn super_ctrl() -> Self {
-        Self { logo: true, ctrl: true, ..Default::default() }
-    }
+    const EMPTY: Self = Self { ctrl: false, alt: false, shift: false, logo: false };
 
     fn from_state(state: &ModifiersState) -> Self {
         Self {
@@ -56,6 +72,11 @@ pub struct KeyCombo {
 }
 
 pub struct Config {
+    pub mod_key: ModKey,
+    /// Multiplier for scroll deltas. Higher = faster initial scroll. 1.0 = raw trackpad.
+    pub scroll_speed: f64,
+    /// Scroll momentum decay factor per frame. 0.92 = snappy, 0.96 = floaty.
+    pub friction: f64,
     bindings: HashMap<KeyCombo, Action>,
 }
 
@@ -71,37 +92,60 @@ impl Config {
 
 impl Default for Config {
     fn default() -> Self {
+        let mod_key = ModKey::Alt;
         let terminal = detect_terminal();
         tracing::info!("Terminal command: {terminal}");
 
+        let m = mod_key.base();
+        let m_shift = Modifiers { shift: true, ..m.clone() };
+        let m_ctrl = Modifiers { ctrl: true, ..m.clone() };
+
         let bindings = HashMap::from([
             (
-                KeyCombo { modifiers: Modifiers::alt(), sym: Keysym::from(keysyms::KEY_Return) },
+                KeyCombo { modifiers: m.clone(), sym: Keysym::from(keysyms::KEY_Return) },
                 Action::SpawnCommand(terminal),
             ),
             (
-                KeyCombo { modifiers: Modifiers::alt(), sym: Keysym::from(keysyms::KEY_q) },
+                KeyCombo { modifiers: m, sym: Keysym::from(keysyms::KEY_q) },
                 Action::CloseWindow,
             ),
+            // Window nudge: Mod+Shift+Arrow
             (
-                KeyCombo { modifiers: Modifiers::super_ctrl(), sym: Keysym::from(keysyms::KEY_Up) },
+                KeyCombo { modifiers: m_shift.clone(), sym: Keysym::from(keysyms::KEY_Up) },
                 Action::NudgeWindow(Direction::Up),
             ),
             (
-                KeyCombo { modifiers: Modifiers::super_ctrl(), sym: Keysym::from(keysyms::KEY_Down) },
+                KeyCombo { modifiers: m_shift.clone(), sym: Keysym::from(keysyms::KEY_Down) },
                 Action::NudgeWindow(Direction::Down),
             ),
             (
-                KeyCombo { modifiers: Modifiers::super_ctrl(), sym: Keysym::from(keysyms::KEY_Left) },
+                KeyCombo { modifiers: m_shift.clone(), sym: Keysym::from(keysyms::KEY_Left) },
                 Action::NudgeWindow(Direction::Left),
             ),
             (
-                KeyCombo { modifiers: Modifiers::super_ctrl(), sym: Keysym::from(keysyms::KEY_Right) },
+                KeyCombo { modifiers: m_shift, sym: Keysym::from(keysyms::KEY_Right) },
                 Action::NudgeWindow(Direction::Right),
+            ),
+            // Viewport panning: Mod+Ctrl+Arrow
+            (
+                KeyCombo { modifiers: m_ctrl.clone(), sym: Keysym::from(keysyms::KEY_Up) },
+                Action::PanViewport(Direction::Up),
+            ),
+            (
+                KeyCombo { modifiers: m_ctrl.clone(), sym: Keysym::from(keysyms::KEY_Down) },
+                Action::PanViewport(Direction::Down),
+            ),
+            (
+                KeyCombo { modifiers: m_ctrl.clone(), sym: Keysym::from(keysyms::KEY_Left) },
+                Action::PanViewport(Direction::Left),
+            ),
+            (
+                KeyCombo { modifiers: m_ctrl, sym: Keysym::from(keysyms::KEY_Right) },
+                Action::PanViewport(Direction::Right),
             ),
         ]);
 
-        Self { bindings }
+        Self { mod_key, scroll_speed: 1.5, friction: 0.96, bindings }
     }
 }
 

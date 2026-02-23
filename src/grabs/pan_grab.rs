@@ -1,5 +1,4 @@
 use smithay::{
-    desktop::Window,
     input::{
         pointer::{
             ButtonEvent, GrabStartData, MotionEvent, PointerGrab, PointerInnerHandle,
@@ -9,15 +8,21 @@ use smithay::{
     utils::{Logical, Point},
 };
 
+use driftwm::canvas::{CanvasPos, canvas_to_screen};
 use crate::state::DriftWm;
 
-pub struct MoveSurfaceGrab {
+/// Pointer grab that pans the viewport camera.
+/// Triggered by Super+right-click or left-click on empty canvas.
+pub struct PanGrab {
     pub start_data: GrabStartData<DriftWm>,
-    pub window: Window,
-    pub initial_window_location: Point<i32, Logical>,
+    pub initial_camera: Point<f64, Logical>,
+    /// Screen-local position at grab start (canvas_pos - camera at grab time).
+    /// We track screen-relative delta to avoid the feedback loop where the
+    /// changing camera feeds back into event.location → delta → camera.
+    pub start_screen_pos: Point<f64, Logical>,
 }
 
-impl PointerGrab<DriftWm> for MoveSurfaceGrab {
+impl PointerGrab<DriftWm> for PanGrab {
     fn motion(
         &mut self,
         data: &mut DriftWm,
@@ -25,9 +30,12 @@ impl PointerGrab<DriftWm> for MoveSurfaceGrab {
         _focus: Option<(<DriftWm as SeatHandler>::PointerFocus, Point<f64, Logical>)>,
         event: &MotionEvent,
     ) {
-        let delta = event.location - self.start_data.location;
-        let new_loc = self.initial_window_location + Point::from((delta.x as i32, delta.y as i32));
-        data.space.map_element(self.window.clone(), new_loc, false);
+        // event.location is in canvas coords (screen + current_camera).
+        // Recover screen-local pos by subtracting current camera.
+        let current_screen_pos = canvas_to_screen(CanvasPos(event.location), data.camera).0;
+        let screen_delta = current_screen_pos - self.start_screen_pos;
+        data.camera = self.initial_camera - screen_delta;
+        data.update_output_from_camera();
         handle.motion(data, None, event);
     }
 

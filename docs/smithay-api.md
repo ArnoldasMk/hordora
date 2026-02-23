@@ -98,3 +98,78 @@ toplevel.send_pending_configure();
 let modifiers = self.seat.get_keyboard().unwrap().modifier_state();
 if modifiers.alt { ... }
 ```
+
+## Cursor Rendering
+
+### CursorImageStatus
+Source: `src/input/pointer/cursor_image.rs`
+```rust
+pub enum CursorImageStatus {
+    Hidden,
+    Named(CursorIcon),       // CursorIcon from cursor_icon crate
+    Surface(WlSurface),      // client-provided cursor
+}
+impl CursorImageStatus {
+    pub fn default_named() -> Self { Self::Named(CursorIcon::Default) }
+}
+```
+`CursorIcon::name()` returns CSS cursor names: `"default"`, `"pointer"`, `"grabbing"`, etc.
+
+### CursorShapeManagerState
+Source: `src/wayland/cursor_shape.rs`
+```rust
+// Init: requires TabletSeatHandler impl (even empty)
+let state = CursorShapeManagerState::new::<DriftWm>(&display_handle);
+delegate_cursor_shape!(DriftWm);
+// Also need: impl TabletSeatHandler for DriftWm {}
+```
+
+### MemoryRenderBuffer
+Source: `src/backend/renderer/element/memory.rs`
+```rust
+// Create from pixel data:
+let buffer = MemoryRenderBuffer::from_slice(
+    &pixels_rgba,          // &[u8]
+    Fourcc::Abgr8888,      // format (xcursor pixels_rgba is ABGR)
+    (width, height),       // impl Into<Size<i32, Buffer>>
+    1,                     // scale
+    Transform::Normal,
+    None,                  // opaque_regions
+);
+
+// Create render element:
+let elem = MemoryRenderBufferRenderElement::from_buffer(
+    renderer,              // &mut R where R: ImportMem
+    location,              // impl Into<Point<f64, Physical>> — PHYSICAL coords!
+    &buffer,
+    None,                  // alpha: Option<f32>
+    None,                  // src: Option<Rectangle<f64, Logical>>
+    None,                  // size: Option<Size<i32, Logical>>
+    Kind::Cursor,          // Kind enum
+)?;
+```
+
+### render_output (space version)
+Source: `src/desktop/space/mod.rs`
+```rust
+pub fn render_output<R, C, E, S>(
+    output: &Output,
+    renderer: &mut R,
+    framebuffer: &mut R::Framebuffer<'_>,
+    alpha: f32,
+    age: usize,
+    spaces: S,
+    custom_elements: &[C],    // C: RenderElement<R> — rendered ON TOP of space
+    damage_tracker: &mut OutputDamageTracker,
+    clear_color: impl Into<Color32F>,
+) -> Result<RenderOutputResult, OutputDamageTrackerError<R::Error>>
+```
+
+## xcursor Crate (0.3)
+
+```rust
+let theme = xcursor::CursorTheme::load("default");  // respects XCURSOR_PATH
+let path = theme.load_icon("default")?;              // -> PathBuf
+let images = xcursor::parser::parse_xcursor(&std::fs::read(path)?)?;
+// Image { width, height, xhot, yhot, pixels_rgba: Vec<u8>, pixels_argb: Vec<u8>, size, delay }
+```

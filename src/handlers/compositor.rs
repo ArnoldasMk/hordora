@@ -44,6 +44,25 @@ impl CompositorHandler for DriftWm {
             if let Some(window) = window {
                 window.on_commit();
 
+                // Center window on first commit once size is known
+                if self.pending_center.remove(&root) {
+                    let geo = window.geometry();
+                    if geo.size.w > 0 && geo.size.h > 0 {
+                        let output_geo = {
+                            let output = self.space.outputs().next().cloned();
+                            output.and_then(|o| self.space.output_geometry(&o))
+                        };
+                        if let Some(output_geo) = output_geo {
+                            let cx = self.camera.x as i32 + output_geo.size.w / 2 - geo.size.w / 2;
+                            let cy = self.camera.y as i32 + output_geo.size.h / 2 - geo.size.h / 2;
+                            self.space.map_element(window.clone(), (cx, cy), false);
+                        }
+                    } else {
+                        // Not ready yet, retry next commit
+                        self.pending_center.insert(root.clone());
+                    }
+                }
+
                 // During resize, adjust window position for top/left edge drags
                 self.handle_resize_commit(&window, &root);
             }

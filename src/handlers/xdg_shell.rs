@@ -5,7 +5,7 @@ use crate::state::DriftWm;
 use smithay::{
     delegate_xdg_shell,
     desktop::Window,
-    input::pointer::{Focus, GrabStartData},
+    input::pointer::{CursorIcon, CursorImageStatus, Focus, GrabStartData},
     reexports::{
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::{Resource, protocol::wl_seat},
@@ -27,21 +27,27 @@ impl XdgShellHandler for DriftWm {
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
         tracing::info!("New toplevel surface");
+        let wl_surface = surface.wl_surface().clone();
         let window = Window::new_wayland_window(surface);
 
-        // Place window at center of first output
+        // Place at screen center (no size offset — size unknown until first commit).
+        // The pending_center set will trigger proper centering once size is known.
         let pos = self
             .space
             .outputs()
             .next()
             .and_then(|o| self.space.output_geometry(o))
-            .map(|geo| (geo.size.w / 2 - 300, geo.size.h / 2 - 200))
+            .map(|geo| {
+                (self.camera.x as i32 + geo.size.w / 2,
+                 self.camera.y as i32 + geo.size.h / 2)
+            })
             .unwrap_or((0, 0));
 
         // Send initial configure — the client won't render until it gets this
         window.toplevel().unwrap().send_configure();
 
         self.space.map_element(window, pos, true);
+        self.pending_center.insert(wl_surface);
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -66,6 +72,7 @@ impl XdgShellHandler for DriftWm {
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
         let wl_surface = surface.wl_surface().clone();
+        self.pending_center.remove(&wl_surface);
         // Collect first to avoid holding an immutable borrow on space
         let window = self
             .space
@@ -148,6 +155,9 @@ impl XdgShellHandler for DriftWm {
             state.states.set(xdg_toplevel::State::Resizing);
         });
 
+        self.grab_cursor = true;
+        self.cursor_status = CursorImageStatus::Named(resize_cursor(edges));
+
         let grab = ResizeSurfaceGrab {
             start_data,
             window,
@@ -178,4 +188,19 @@ fn check_grab(
     }
 
     Some(start_data)
+}
+
+/// Map resize edge to the appropriate directional cursor icon.
+fn resize_cursor(edges: xdg_toplevel::ResizeEdge) -> CursorIcon {
+    match edges {
+        xdg_toplevel::ResizeEdge::Top => CursorIcon::NResize,
+        xdg_toplevel::ResizeEdge::Bottom => CursorIcon::SResize,
+        xdg_toplevel::ResizeEdge::Left => CursorIcon::WResize,
+        xdg_toplevel::ResizeEdge::Right => CursorIcon::EResize,
+        xdg_toplevel::ResizeEdge::TopLeft => CursorIcon::NwResize,
+        xdg_toplevel::ResizeEdge::TopRight => CursorIcon::NeResize,
+        xdg_toplevel::ResizeEdge::BottomLeft => CursorIcon::SwResize,
+        xdg_toplevel::ResizeEdge::BottomRight => CursorIcon::SeResize,
+        _ => CursorIcon::Default,
+    }
 }
