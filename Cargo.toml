@@ -2,6 +2,8 @@
 name = "driftwm"
 version = "0.1.0"
 edition = "2024"
+license = "GPL-3.0-or-later"
+authors = ["Klim Kostiuk <2601074@gmail.com>"]
 
 [dependencies]
 smithay = { version = "0.7.0", default-features = false, features = [
