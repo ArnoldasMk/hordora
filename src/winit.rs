@@ -35,12 +35,10 @@ render_elements! {
     Cursor=MemoryRenderBufferRenderElement<GlesRenderer>,
 }
 
-/// Uniform declarations shared by all background shaders. Shaders ignore what they don't use.
+/// Uniform declarations for background shaders. u_camera is the viewport position.
+/// Shaders define their own constants (colors, spacing, etc.) directly in GLSL.
 const BG_UNIFORMS: &[UniformName<'static>] = &[
     UniformName { name: std::borrow::Cow::Borrowed("u_camera"), type_: UniformType::_2f },
-    UniformName { name: std::borrow::Cow::Borrowed("u_bg_color"), type_: UniformType::_4f },
-    UniformName { name: std::borrow::Cow::Borrowed("u_dot_color"), type_: UniformType::_4f },
-    UniformName { name: std::borrow::Cow::Borrowed("u_dot_spacing"), type_: UniformType::_1f },
 ];
 
 /// Initialize the winit backend: create a window, set up the output, and
@@ -83,14 +81,29 @@ pub fn init_winit(
     );
     data.state.dmabuf_global = Some(dmabuf_global);
 
-    // Compile background shader if shader_path is set
-    if let Some(path) = data.state.config.background.shader_path.as_deref() {
-        let shader_source = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("Failed to read shader {path}: {e}"));
+    // Compile background shader: explicit path > built-in dot grid default
+    let shader_source = if let Some(path) = data.state.config.background.shader_path.as_deref() {
+        std::fs::read_to_string(path)
+            .unwrap_or_else(|e| panic!("Failed to read shader {path}: {e}"))
+    } else if data.state.config.background.tile_path.is_none() {
+        driftwm::config::DEFAULT_SHADER.to_string()
+    } else {
+        String::new()
+    };
+    if !shader_source.is_empty() {
         let shader = data.state.backend.as_mut().unwrap().renderer()
             .compile_custom_pixel_shader(&shader_source, BG_UNIFORMS)
             .expect("Failed to compile background shader");
-        data.state.background_shader = Some(shader);
+        data.state.background_shader = Some(shader.clone());
+
+        // Create the cached element once — its stable Id lets the damage tracker
+        // recognise it across frames and skip re-rendering when nothing changed.
+        let area = Rectangle::from_size(size.to_logical(1));
+        data.state.cached_bg_element = Some(PixelShaderElement::new(
+            shader, area, Some(vec![area]), 1.0,
+            vec![Uniform::new("u_camera", (0.0f32, 0.0f32))],
+            Kind::Unspecified,
+        ));
     }
 
     // Load tile image if tile_path is set (and no shader — shader takes priority)
@@ -167,6 +180,25 @@ pub fn init_winit(
             // --- Sync camera → output position ---
             data.state.update_output_from_camera();
 
+            // --- Update cached background element (before taking backend) ---
+            let camera_moved = data.state.camera != data.state.last_rendered_camera;
+            if let Some(ref mut elem) = data.state.cached_bg_element {
+                let scale = output.current_scale().integer_scale();
+                let output_size = output
+                    .current_mode()
+                    .map(|m| m.size.to_logical(scale))
+                    .unwrap_or((1, 1).into());
+                // resize() no-ops when area is unchanged (internal guard)
+                let area = Rectangle::from_size(output_size);
+                elem.resize(area, Some(vec![area]));
+                // update_uniforms() always bumps commit_counter — only call on move
+                if camera_moved {
+                    elem.update_uniforms(vec![
+                        Uniform::new("u_camera", (data.state.camera.x as f32, data.state.camera.y as f32)),
+                    ]);
+                }
+            }
+
             // --- Take backend to split borrow from state ---
             let mut backend = data.state.backend.take().unwrap();
 
@@ -195,15 +227,18 @@ pub fn init_winit(
                         }
                     };
 
-                    // Build background element
-                    let bg_elements = build_background_elements(
-                        &data.state,
-                        renderer,
-                        &output,
-                    );
+                    // Background: shader uses cached element (stable Id), tiles rebuilt each frame
+                    let bg_elements: Vec<OutputRenderElements> =
+                        if let Some(ref elem) = data.state.cached_bg_element {
+                            vec![OutputRenderElements::Background(elem.clone())]
+                        } else if data.state.background_tile.is_some() {
+                            build_tile_background_elements(&data.state, renderer, &output)
+                        } else {
+                            vec![]
+                        };
 
                     // Compose all elements: cursor (top) → windows → background (bottom)
-                    let clear_color = data.state.config.background.bg_color;
+                    let clear_color = [0.0f32, 0.0, 0.0, 1.0];
                     let mut all_elements: Vec<OutputRenderElements> = Vec::with_capacity(
                         cursor_elements.len() + space_elements.len() + bg_elements.len(),
                     );
@@ -234,6 +269,9 @@ pub fn init_winit(
                 tracing::warn!("Submit error: {err:?}");
             }
 
+            // --- Record camera for next-frame change detection ---
+            data.state.last_rendered_camera = data.state.camera;
+
             // --- Put backend back ---
             data.state.backend = Some(backend);
 
@@ -259,10 +297,11 @@ pub fn init_winit(
     Ok(())
 }
 
-/// Build the background render element(s) for the current frame.
+/// Build tiled background elements for the current frame.
 ///
-/// Priority: shader > tile > solid bg_color (via clear color, returns empty).
-fn build_background_elements(
+/// Tile images already have stable Ids (from MemoryRenderBuffer), so the damage
+/// tracker handles them correctly without caching.
+fn build_tile_background_elements(
     state: &crate::state::DriftWm,
     renderer: &mut GlesRenderer,
     output: &Output,
@@ -273,29 +312,6 @@ fn build_background_elements(
         .map(|m| m.size.to_logical(scale))
         .unwrap_or((1, 1).into());
 
-    // Shader background
-    if let Some(shader) = state.background_shader.clone() {
-        let bg = &state.config.background;
-        let area = Rectangle::from_size(output_size);
-        let uniforms = vec![
-            Uniform::new("u_camera", (state.camera.x as f32, state.camera.y as f32)),
-            Uniform::new("u_bg_color", bg.bg_color),
-            // Pass zero-values for optional uniforms — shaders ignore what they don't use
-            Uniform::new("u_dot_color", [0.0f32; 4]),
-            Uniform::new("u_dot_spacing", 0.0f32),
-        ];
-
-        return vec![OutputRenderElements::Background(PixelShaderElement::new(
-            shader,
-            area,
-            Some(vec![area]),
-            1.0,
-            uniforms,
-            Kind::Unspecified,
-        ))];
-    }
-
-    // Tile background — repeat the image across the visible viewport
     if let Some((tile_buf, tw, th)) = &state.background_tile {
         let tw = *tw;
         let th = *th;

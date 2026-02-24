@@ -18,7 +18,7 @@ const float DOT_RADIUS = 1.0; // dot radius in canvas pixels
 void main() {
     // Screen pixel position -> canvas position
     vec2 screen_pixel = v_coords * size;
-    vec2 canvas_pos = screen_pixel + u_camera;
+    vec2 canvas_pos = screen_pixel + mod(u_camera, DOT_SPACING);
 
     // Distance to nearest grid intersection point
     vec2 grid = mod(canvas_pos, DOT_SPACING);

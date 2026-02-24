@@ -35,7 +35,7 @@ use smithay::wayland::selection::wlr_data_control::DataControlState;
 use smithay::wayland::viewporter::ViewporterState;
 use smithay::wayland::xdg_activation::XdgActivationState;
 use smithay::backend::renderer::element::memory::MemoryRenderBuffer;
-use smithay::backend::renderer::gles::{GlesPixelProgram, GlesRenderer};
+use smithay::backend::renderer::gles::{GlesPixelProgram, GlesRenderer, element::PixelShaderElement};
 use smithay::backend::winit::WinitGraphicsBackend;
 use smithay::utils::Transform;
 
@@ -106,6 +106,10 @@ pub struct DriftWm {
     pub backend: Option<WinitGraphicsBackend<GlesRenderer>>,
     /// Compiled background shader program (compiled once at startup).
     pub background_shader: Option<GlesPixelProgram>,
+    /// Cached shader background element (stable Id for damage tracking).
+    pub cached_bg_element: Option<PixelShaderElement>,
+    /// Camera position at last render — used to detect movement and update uniforms.
+    pub last_rendered_camera: Point<f64, Logical>,
     /// Pre-loaded tile image for tiled background (loaded once at startup).
     /// Stores (buffer, width, height) since MemoryRenderBuffer doesn't expose size.
     pub background_tile: Option<(MemoryRenderBuffer, i32, i32)>,
@@ -199,6 +203,8 @@ impl DriftWm {
             cursor_buffers: HashMap::new(),
             backend: None,
             background_shader: None,
+            cached_bg_element: None,
+            last_rendered_camera: Point::from((f64::NAN, f64::NAN)),
             background_tile: None,
             dmabuf_state: DmabufState::new(),
             dmabuf_global: None,

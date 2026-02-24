@@ -82,24 +82,15 @@ pub struct KeyCombo {
     pub sym: Keysym,
 }
 
-#[derive(Clone, Debug)]
+/// Built-in dot grid shader — used when no shader_path or tile_path is configured.
+pub const DEFAULT_SHADER: &str = include_str!("../assets/shaders/dot_grid.glsl");
+
+#[derive(Clone, Debug, Default)]
 pub struct BackgroundConfig {
-    /// Clear color / solid fallback (normalized RGBA). Shows through when no shader or tile.
-    pub bg_color: [f32; 4],
     /// Path to a GLSL fragment shader. If set, shader is compiled and rendered fullscreen.
     pub shader_path: Option<String>,
     /// Path to a tile image (PNG/JPG). If set, image is tiled across the canvas.
     pub tile_path: Option<String>,
-}
-
-impl Default for BackgroundConfig {
-    fn default() -> Self {
-        Self {
-            bg_color: [0.0, 0.0, 0.0, 1.0],
-            shader_path: Some("assets/shaders/dot_grid.glsl".to_string()),
-            tile_path: None,
-        }
-    }
 }
 
 pub struct Config {
