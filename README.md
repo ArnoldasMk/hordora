@@ -14,7 +14,7 @@ coordinates on this plane. You move around with trackpad gestures:
 
 - **2-finger scroll** on empty desktop — pan the canvas
 - **3-finger scroll** anywhere — pan the canvas (ignores windows)
-- **3-finger hold+drag** on a window — move that window
+- **3-finger double-tap+drag** on a window — move that window
 - **2-finger pinch** — zoom in/out (bird's eye view)
 - **4-finger scroll** — jump to the nearest window in that direction
 - **4/5-finger pinch** — toggle home position
@@ -111,7 +111,7 @@ src/
 8. Layer shell — waybar, fuzzel, notifications
 9. Config file — TOML parsing, user keybindings
 10. udev backend — DRM/KMS, libinput, session management
-11. Trackpad gestures — 3-finger pan/hold-to-move, gesture state machine
+11. Trackpad gestures — 3-finger pan/double-tap-drag, gesture state machine
 12. Multi-monitor — multiple viewports on same canvas
 13. XWayland — X11 app support
 14. Widgets + polish — eww preset, animations, shadows, damage optimization

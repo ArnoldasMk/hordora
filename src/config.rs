@@ -233,7 +233,7 @@ impl Default for Config {
             pan_step: 100.0,
             repeat_delay: 200,
             repeat_rate: 25,
-            edge_zone: 80.0,
+            edge_zone: 100.0,
             edge_pan_min: 4.0,
             edge_pan_max: 30.0,
             background: BackgroundConfig::default(),

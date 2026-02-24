@@ -166,14 +166,14 @@ impl DriftWm {
     /// 3. Left-click on empty canvas → pan canvas
     /// 4. Normal click → click-to-focus + forward to client
     fn on_pointer_button<I: InputBackend>(&mut self, event: I::PointerButtonEvent) {
-        self.last_scroll_pan = None;
-        self.momentum.stop();
         let serial = SERIAL_COUNTER.next_serial();
         let button = event.button_code();
         let button_state = event.state();
         let pointer = self.seat.get_pointer().unwrap();
 
         if button_state == ButtonState::Pressed {
+            self.last_scroll_pan = None;
+            self.momentum.stop();
             let pos = pointer.current_location();
             let keyboard = self.seat.get_keyboard().unwrap();
             let mods = keyboard.modifier_state();
@@ -213,17 +213,7 @@ impl DriftWm {
 
             // 2. Mod + left-drag → pan canvas (anywhere)
             if wm_mod && button == BTN_LEFT {
-                let screen_pos = canvas_to_screen(CanvasPos(pos), self.camera).0;
-                let start_data = GrabStartData {
-                    focus: None,
-                    button,
-                    location: pos,
-                };
-                let grab = PanGrab {
-                    start_data,
-                    initial_camera: self.camera,
-                    start_screen_pos: screen_pos,
-                };
+                let grab = self.make_pan_grab(pos, button);
                 pointer.set_grab(self, grab, serial, Focus::Clear);
                 return;
             }
@@ -247,17 +237,7 @@ impl DriftWm {
                 keyboard.set_focus(self, None::<FocusTarget>, serial);
 
                 if button == BTN_LEFT {
-                        let screen_pos = canvas_to_screen(CanvasPos(pos), self.camera).0;
-                    let start_data = GrabStartData {
-                        focus: None,
-                        button,
-                        location: pos,
-                    };
-                    let grab = PanGrab {
-                        start_data,
-                        initial_camera: self.camera,
-                        start_screen_pos: screen_pos,
-                    };
+                    let grab = self.make_pan_grab(pos, button);
                     pointer.set_grab(self, grab, serial, Focus::Clear);
                     return;
                 }
@@ -368,9 +348,7 @@ impl DriftWm {
             if h != 0.0 || v != 0.0 {
                 let s = self.config.scroll_speed;
                 let delta = Point::from((h * s, v * s));
-                self.momentum.accumulate(delta, self.frame_counter);
-                self.camera += delta;
-                self.update_output_from_camera();
+                self.drift_pan(delta);
 
                 // Move pointer by same delta so cursor stays at the same
                 // screen position (screen_pos = canvas_pos - camera)
@@ -410,6 +388,18 @@ impl DriftWm {
 
         pointer.axis(self, frame);
         pointer.frame(self);
+    }
+
+    /// Build a PanGrab for click-drag viewport panning.
+    fn make_pan_grab(&self, canvas_pos: Point<f64, smithay::utils::Logical>, button: u32) -> PanGrab {
+        PanGrab {
+            start_data: GrabStartData {
+                focus: None,
+                button,
+                location: canvas_pos,
+            },
+            last_screen_pos: canvas_to_screen(CanvasPos(canvas_pos), self.camera).0,
+        }
     }
 
     /// Find the Wayland surface and local coordinates under the given canvas position.

@@ -226,6 +226,7 @@ impl DriftWm {
         };
 
         self.camera += delta;
+        self.update_output_from_camera();
 
         // Move pointer so cursor stays at the same screen position
         let pointer = self.seat.get_pointer().unwrap();
@@ -251,6 +252,7 @@ impl DriftWm {
     pub fn apply_edge_pan(&mut self) {
         let Some(velocity) = self.edge_pan_velocity else { return; };
         self.camera += velocity;
+        self.update_output_from_camera();
 
         // Shift pointer canvas position so screen position stays fixed
         let pointer = self.seat.get_pointer().unwrap();
@@ -268,6 +270,14 @@ impl DriftWm {
             },
         );
         pointer.frame(self);
+    }
+
+    /// Apply a viewport pan delta with momentum accumulation.
+    /// Call this from any input path that should drift (scroll, click-drag, future gestures).
+    pub fn drift_pan(&mut self, delta: Point<f64, Logical>) {
+        self.momentum.accumulate(delta, self.frame_counter);
+        self.camera += delta;
+        self.update_output_from_camera();
     }
 
     /// Sync each output's position to the current camera, so render_output

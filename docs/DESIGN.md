@@ -99,18 +99,17 @@ if the surface under the cursor changes mid-gesture).
 | 2       | scroll    | desktop   | Pan viewport                   |
 | 2       | pinch     | desktop   | Zoom in/out                    |
 | 3       | scroll    | anywhere  | Pan viewport (ignores windows) |
-| 3       | hold+drag | on window | Move window (see below)        |
+| 3       | dbl-tap+drag | on window | Move window (see below)     |
 | 3+Super | drag      | on window | Resize window                  |
 | 3       | pinch     | on window | Toggle fullscreen              |
 | 4       | scroll    | desktop   | Center nearest window in direction |
 | 4/5     | pinch     | anywhere  | Toggle home (0,0) ↔ previous   |
 
-**3-finger hold-to-move**: Place three fingers on a window, hold ~500ms until
-visual feedback, then drag. Immediate 3-finger scroll always pans — the hold
-disambiguates "drift around" from "pick up." Feedback on grab activation:
-position pulse (window shifts -1px in all directions for ~100ms, then back)
-and cursor changes to grab icon. The pulse is subtle but felt — confirms the
-grab without resizing the window (no configure sent to client).
+**3-finger double-tap-drag**: Double-tap with three fingers on a window, then
+drag on the second tap (like double-middle-click-drag with a mouse). Immediate
+3-finger scroll always pans the viewport — the double-tap disambiguates "pan
+viewport" from "move window." No visual feedback needed since intent is
+unambiguous from the double-tap.
 
 **4-finger center**: Searches from cursor in the scroll direction for the
 nearest window (using a viewport-width search band). Centers it, focuses,
@@ -133,9 +132,10 @@ Pinch-out (or second pinch-in) restores. Peek at home widgets and jump back.
 
 ### Edge auto-pan
 
-When dragging a window to the viewport edge (~20px zone), the viewport
-auto-scrolls in that direction at a constant rate. All 8 directions (corners
-= diagonal). Stops when cursor leaves the zone or the drag ends.
+When dragging a window to the viewport edge, the viewport auto-pans in that
+direction. Speed is depth-proportional — deeper into the zone means faster
+panning (quadratic ramp, like a joystick). All 8 directions (corners =
+diagonal blend). Stops when cursor leaves the zone or the drag ends.
 
 ## Keyboard shortcuts
 
@@ -341,7 +341,7 @@ repeat_rate = 25       # keys per second. default: 25
 repeat_delay = 300     # ms before repeat starts. default: 300
 ```
 
-### Scroll / canvas panning
+### Scroll / viewport panning
 
 ```toml
 [input.scroll]
@@ -491,8 +491,8 @@ requiring real hardware (udev/TTY). Milestones 1–8 work entirely in winit.
 10. **udev backend**: DRM/KMS setup, libinput integration, logind session
     management. The "run on real hardware" milestone.
 11. **Trackpad gestures**: wire up libinput gesture events. 3-finger pan
-    (viewport), 3-finger hold-to-move (window), pinch to zoom. Gesture
-    state machine with conflict resolution. Requires udev backend.
+    (viewport), 3-finger double-tap-drag (move window), pinch to zoom.
+    Gesture state machine with conflict resolution. Requires udev backend.
 12. **Multi-monitor**: multiple viewports on same canvas. Independent
     camera/zoom per output. Requires udev backend.
 13. **XWayland**: run X11 apps (Firefox, Steam, etc).

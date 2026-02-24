@@ -11,15 +11,14 @@ use smithay::{
 use driftwm::canvas::{CanvasPos, canvas_to_screen};
 use crate::state::DriftWm;
 
-/// Pointer grab that pans the viewport camera.
-/// Triggered by Super+right-click or left-click on empty canvas.
+/// Pointer grab that pans the viewport camera with momentum.
+/// Triggered by Super+left-click or left-click on empty canvas.
+/// Accumulates momentum during drag so the viewport coasts on release.
 pub struct PanGrab {
     pub start_data: GrabStartData<DriftWm>,
-    pub initial_camera: Point<f64, Logical>,
-    /// Screen-local position at grab start (canvas_pos - camera at grab time).
-    /// We track screen-relative delta to avoid the feedback loop where the
-    /// changing camera feeds back into event.location → delta → camera.
-    pub start_screen_pos: Point<f64, Logical>,
+    /// Screen-local position of the pointer last frame.
+    /// Delta between consecutive screen positions drives the pan.
+    pub last_screen_pos: Point<f64, Logical>,
 }
 
 impl PointerGrab<DriftWm> for PanGrab {
@@ -30,13 +29,22 @@ impl PointerGrab<DriftWm> for PanGrab {
         _focus: Option<(<DriftWm as SeatHandler>::PointerFocus, Point<f64, Logical>)>,
         event: &MotionEvent,
     ) {
-        // event.location is in canvas coords (screen + current_camera).
-        // Recover screen-local pos by subtracting current camera.
+        // Recover screen position from canvas coords
         let current_screen_pos = canvas_to_screen(CanvasPos(event.location), data.camera).0;
-        let screen_delta = current_screen_pos - self.start_screen_pos;
-        data.camera = self.initial_camera - screen_delta;
-        data.update_output_from_camera();
-        handle.motion(data, None, event);
+        let screen_delta = current_screen_pos - self.last_screen_pos;
+
+        // Dragging right → camera decreases → negate
+        let camera_delta = Point::from((-screen_delta.x, -screen_delta.y));
+        data.drift_pan(camera_delta);
+        self.last_screen_pos = current_screen_pos;
+
+        // Shift pointer canvas position so cursor stays at the same screen spot
+        let adjusted = MotionEvent {
+            location: event.location + camera_delta,
+            serial: event.serial,
+            time: event.time,
+        };
+        handle.motion(data, None, &adjusted);
     }
 
     fn button(
@@ -47,6 +55,7 @@ impl PointerGrab<DriftWm> for PanGrab {
     ) {
         handle.button(data, event);
         if handle.current_pressed().is_empty() {
+            // Momentum is already primed from accumulated deltas — friction handles the coast
             handle.unset_grab(self, data, event.serial, event.time, true);
         }
     }
