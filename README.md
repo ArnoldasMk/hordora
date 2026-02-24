@@ -18,6 +18,7 @@ coordinates on this plane. You move around with trackpad gestures:
 - **2-finger scroll** on empty desktop — pan viewport
 - **3-finger scroll** anywhere — pan viewport (ignores windows)
 - **3-finger double-tap+drag** on a window — move that window
+- **`Mod` + 3-finger drag** on a window — resize that window
 - **2-finger pinch** on empty desktop — zoom
 - **3-finger pinch** anywhere — zoom (ignores windows)
 - **4-finger scroll** — jump to the nearest window in that direction
