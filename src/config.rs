@@ -96,7 +96,7 @@ impl Default for BackgroundConfig {
     fn default() -> Self {
         Self {
             bg_color: [0.0, 0.0, 0.0, 1.0],
-            shader_path: Some("assets/shaders/pink_cloud.glsl".to_string()),
+            shader_path: Some("assets/shaders/dot_grid.glsl".to_string()),
             tile_path: None,
         }
     }

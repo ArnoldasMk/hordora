@@ -9,8 +9,8 @@ uniform float alpha;
 uniform vec2 u_camera;
 
 // --- Tweak these ---
-const vec4 BG_COLOR = vec4(0.173, 0.208, 0.235, 1.0); // #2c353c
-const vec4 DOT_COLOR = vec4(0.831, 0.780, 0.667, 1.0); // #d4c7aa
+const vec4 BG_COLOR = vec4(0.0, 0.0, 0.0, 1.0);
+const vec4 DOT_COLOR = vec4(1.0, 1.0, 1.0, 1.0);
 const float DOT_SPACING = 80.0; // pixels between dots at zoom 1.0
 const float DOT_RADIUS = 1.0; // dot radius in canvas pixels
 // -------------------
