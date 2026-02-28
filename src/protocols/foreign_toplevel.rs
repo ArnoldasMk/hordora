@@ -84,23 +84,29 @@ pub fn refresh<D>(
 ) where
     D: Dispatch<ZwlrForeignToplevelHandleV1, ()> + 'static,
 {
-    // 1. Remove closed windows
+    // 1. Remove closed or widget windows
     ft_state.toplevels.retain(|surface, data| {
-        let still_alive = space
-            .elements()
-            .any(|w| w.toplevel().unwrap().wl_surface() == surface);
-        if !still_alive {
+        let dominated = space.elements().any(|w| {
+            let s = w.toplevel().unwrap().wl_surface();
+            s == surface
+                && !crate::config::applied_rule(s).is_some_and(|r| r.widget)
+        });
+        if !dominated {
             for instance in data.instances.keys() {
                 instance.closed();
             }
         }
-        still_alive
+        dominated
     });
 
     // 2. Refresh non-focused windows first (deactivate-before-activate ordering)
     let mut focused_entry = None;
     for window in space.elements() {
-        let wl_surface = window.toplevel().unwrap().wl_surface().clone();
+        let wl_surface = window.toplevel().unwrap().wl_surface();
+        if crate::config::applied_rule(wl_surface).is_some_and(|r| r.widget) {
+            continue;
+        }
+        let wl_surface = wl_surface.clone();
         let is_focused = focused_surface.is_some_and(|fs| fs == &wl_surface);
         if is_focused {
             focused_entry = Some(window.clone());
