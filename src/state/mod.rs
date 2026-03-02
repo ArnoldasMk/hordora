@@ -289,6 +289,8 @@ pub struct DriftWm {
     /// CRTCs with a frame queued to DRM, awaiting VBlank.
     pub frames_pending: HashSet<crtc::Handle>,
 
+    /// Grace period before showing loading cursor (avoids flash for fast-launching apps).
+    pub exec_cursor_show_at: Option<Instant>,
     /// Deadline for loading cursor (shown after Exec until new window commits or timeout).
     pub exec_cursor_deadline: Option<Instant>,
 
@@ -434,6 +436,7 @@ impl DriftWm {
             active_crtcs: HashSet::new(),
             redraws_needed: HashSet::new(),
             frames_pending: HashSet::new(),
+            exec_cursor_show_at: None,
             exec_cursor_deadline: None,
             config_file_mtime: None,
         }
@@ -488,6 +491,7 @@ impl DriftWm {
             || self.edge_pan_velocity.is_some()
             || self.held_action.is_some()
             || (self.momentum.velocity.x != 0.0 || self.momentum.velocity.y != 0.0)
+            || self.exec_cursor_show_at.is_some()
             || self.exec_cursor_deadline.is_some()
             || self.cursor_is_animated()
     }

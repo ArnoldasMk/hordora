@@ -5,8 +5,8 @@ mod pointer;
 use smithay::{
     backend::{
         input::{
-            AbsolutePositionEvent, Event, InputBackend, InputEvent, KeyState, KeyboardKeyEvent,
-            PointerMotionEvent,
+            AbsolutePositionEvent, Axis, Event, InputBackend, InputEvent, KeyState,
+            KeyboardKeyEvent, PointerAxisEvent, PointerButtonEvent, PointerMotionEvent,
         },
         session::Session,
     },
@@ -25,7 +25,8 @@ impl DriftWm {
     pub fn process_input_event<I: InputBackend>(&mut self, event: InputEvent<I>) {
         self.mark_all_dirty();
 
-        // When locked, only keyboard (for VT switch) and pointer motion are processed
+        // When locked, forward keyboard (VT switch + lock surface input) and
+        // pointer events directly to smithay — no compositor grabs or gestures.
         if !matches!(self.session_lock, crate::state::SessionLock::Unlocked) {
             match event {
                 InputEvent::Keyboard { event } => self.on_keyboard::<I>(event),
@@ -33,8 +34,37 @@ impl DriftWm {
                 InputEvent::PointerMotionAbsolute { event } => {
                     self.on_pointer_motion_absolute::<I>(event)
                 }
-                InputEvent::PointerButton { event } => self.on_pointer_button::<I>(event),
-                InputEvent::PointerAxis { event } => self.on_pointer_axis::<I>(event),
+                InputEvent::PointerButton { event } => {
+                    let pointer = self.seat.get_pointer().unwrap();
+                    pointer.button(
+                        self,
+                        &smithay::input::pointer::ButtonEvent {
+                            button: PointerButtonEvent::button_code(&event),
+                            state: PointerButtonEvent::state(&event),
+                            serial: SERIAL_COUNTER.next_serial(),
+                            time: Event::time_msec(&event),
+                        },
+                    );
+                    pointer.frame(self);
+                }
+                InputEvent::PointerAxis { event } => {
+                    let pointer = self.seat.get_pointer().unwrap();
+                    let mut frame = smithay::input::pointer::AxisFrame::new(
+                        Event::time_msec(&event),
+                    ).source(event.source());
+                    for axis in [Axis::Horizontal, Axis::Vertical] {
+                        if let Some(amount) = event.amount(axis) {
+                            frame = frame
+                                .value(axis, amount)
+                                .relative_direction(axis, event.relative_direction(axis));
+                        }
+                        if let Some(v120) = event.amount_v120(axis) {
+                            frame = frame.v120(axis, v120 as i32);
+                        }
+                    }
+                    pointer.axis(self, frame);
+                    pointer.frame(self);
+                }
                 _ => {}
             }
             return;

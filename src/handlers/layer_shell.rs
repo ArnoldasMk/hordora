@@ -40,6 +40,7 @@ impl WlrLayerShellHandler for DriftWm {
 
         // New surface arrived — clear loading cursor
         if self.exec_cursor_deadline.take().is_some() {
+            self.exec_cursor_show_at = None;
             self.cursor_status = CursorImageStatus::default_named();
         }
 

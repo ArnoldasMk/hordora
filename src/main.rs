@@ -83,6 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe { std::env::set_var("QT_QPA_PLATFORM", "wayland") };
     unsafe { std::env::set_var("SDL_VIDEODRIVER", "wayland") };
     unsafe { std::env::set_var("GDK_BACKEND", "wayland,x11") };
+    unsafe { std::env::set_var("ELECTRON_OZONE_PLATFORM_HINT", "wayland") };
 
     event_loop
         .handle()

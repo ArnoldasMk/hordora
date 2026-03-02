@@ -59,9 +59,10 @@ impl SeatHandler for DriftWm {
         if self.grab_cursor {
             return;
         }
-        // During exec loading, replace default cursor with Progress but let
-        // client surface cursors through (they take priority).
+        // During exec loading (after grace period), replace default cursor with
+        // Wait but let client surface cursors through (they take priority).
         if self.exec_cursor_deadline.is_some()
+            && self.exec_cursor_show_at.map_or(true, |t| std::time::Instant::now() >= t)
             && matches!(&image, CursorImageStatus::Named(icon) if *icon == CursorIcon::Default)
         {
             self.cursor_status = CursorImageStatus::Named(CursorIcon::Wait);
@@ -350,7 +351,24 @@ impl SessionLockHandler for DriftWm {
     fn lock(&mut self, confirmation: SessionLocker) {
         tracing::info!("Session lock requested");
         self.session_lock = SessionLock::Pending(confirmation);
-        // Clear loading cursor so it doesn't linger after unlock
+
+        // Kill all transient input/animation state so nothing fires during lock
+        self.gesture_state = None;
+        self.momentum.stop();
+        self.held_action = None;
+        self.edge_pan_velocity = None;
+        self.panning = false;
+        self.grab_cursor = false;
+        self.camera_target = None;
+        self.zoom_target = None;
+        if let Some(pending) = self.pending_middle_click.take() {
+            self.loop_handle.remove(pending.timer_token);
+        }
+        let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+        let pointer = self.seat.get_pointer().unwrap();
+        pointer.unset_grab(self, serial, 0);
+
+        self.exec_cursor_show_at = None;
         self.exec_cursor_deadline = None;
         self.cursor_status = smithay::input::pointer::CursorImageStatus::default_named();
         // Clear keyboard focus — no window should be interactable

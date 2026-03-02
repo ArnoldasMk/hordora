@@ -219,6 +219,7 @@ impl CompositorHandler for DriftWm {
 
                         // New window arrived — clear loading cursor
                         if self.exec_cursor_deadline.take().is_some() {
+                            self.exec_cursor_show_at = None;
                             self.cursor_status =
                                 smithay::input::pointer::CursorImageStatus::default_named();
                         }

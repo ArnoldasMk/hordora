@@ -145,13 +145,23 @@ impl DriftWm {
         self.warp_pointer(pos + delta);
     }
 
-    /// Clear the loading cursor if the exec timeout has elapsed.
+    /// Manage the loading cursor: activate after grace period, clear after deadline.
     pub fn check_exec_cursor_timeout(&mut self) {
-        if let Some(deadline) = self.exec_cursor_deadline
-            && Instant::now() >= deadline
-        {
+        let Some(deadline) = self.exec_cursor_deadline else {
+            return;
+        };
+        let now = Instant::now();
+        if now >= deadline {
+            self.exec_cursor_show_at = None;
             self.exec_cursor_deadline = None;
             self.cursor_status = CursorImageStatus::default_named();
+        } else if let Some(show_at) = self.exec_cursor_show_at
+            && now >= show_at
+        {
+            self.exec_cursor_show_at = None;
+            self.cursor_status = CursorImageStatus::Named(
+                smithay::input::pointer::CursorIcon::Wait,
+            );
         }
     }
 
