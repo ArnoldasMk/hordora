@@ -175,11 +175,8 @@ impl DriftWm {
                 }).map(|w| {
                     let loc = self.space.element_location(w).unwrap_or_default();
                     let size = w.geometry().size;
-                    let center = Point::from((
-                        loc.x as f64 + size.w as f64 / 2.0,
-                        loc.y as f64 + size.h as f64 / 2.0,
-                    ));
-                    (w.clone(), center)
+                    let closest = canvas::closest_point_on_rect(origin, loc, size);
+                    (w.clone(), closest)
                 }).collect::<Vec<_>>();
 
                 let nearest = canvas::find_nearest(

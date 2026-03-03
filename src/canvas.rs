@@ -207,6 +207,19 @@ pub fn snap_zoom(z: f64) -> f64 {
     }
 }
 
+/// Closest point on an axis-aligned rect to `origin`.
+/// If origin is inside the rect, returns origin itself (distance 0).
+pub fn closest_point_on_rect(
+    origin: Point<f64, Logical>,
+    loc: Point<i32, Logical>,
+    size: Size<i32, Logical>,
+) -> Point<f64, Logical> {
+    Point::from((
+        origin.x.clamp(loc.x as f64, (loc.x + size.w) as f64),
+        origin.y.clamp(loc.y as f64, (loc.y + size.h) as f64),
+    ))
+}
+
 /// Find the nearest item in a 90° cone from `origin` in the given direction.
 ///
 /// Uses dot/cross product against the direction unit vector: a candidate is
