@@ -19,6 +19,7 @@
 # model = ""                 # XKB model (e.g., "pc105")
 # repeat_rate = 25           # keys/sec
 # repeat_delay = 200         # ms before repeat starts
+# layout_independent = true  # match bindings by physical key position across layouts
 
 [input.scroll]
 # speed = 1.5                 # viewport pan multiplier

@@ -47,6 +47,7 @@ pub(super) struct KeyboardConfig {
     pub variant: Option<String>,
     pub options: Option<String>,
     pub model: Option<String>,
+    pub layout_independent: Option<bool>,
 }
 
 #[derive(Deserialize, Default)]

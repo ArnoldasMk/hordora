@@ -167,6 +167,14 @@ impl DriftWm {
                     if let Some(action) = state.config.lookup(modifiers, sym) {
                         return FilterResult::Intercept(Some(action.clone()));
                     }
+
+                    if state.config.layout_independent
+                        && let Some(raw_sym) = handle.raw_latin_sym_or_raw_current_sym()
+                        && raw_sym != sym
+                        && let Some(action) = state.config.lookup(modifiers, raw_sym)
+                    {
+                        return FilterResult::Intercept(Some(action.clone()));
+                    }
                 }
                 FilterResult::Forward
             },
