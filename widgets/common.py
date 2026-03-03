@@ -308,32 +308,87 @@ def get_notifications() -> int:
         return 0
 
 
+_WMO_DESC = {
+    0: "Clear",
+    1: "Partly cloudy",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Fog",
+    48: "Fog",
+    51: "Drizzle",
+    53: "Drizzle",
+    55: "Drizzle",
+    61: "Rain",
+    63: "Rain",
+    65: "Rain",
+    71: "Snow",
+    73: "Snow",
+    75: "Snow",
+    77: "Snow",
+    80: "Rain",
+    81: "Rain",
+    82: "Rain",
+    85: "Snow",
+    86: "Snow",
+    95: "Thunderstorm",
+    96: "Thunderstorm",
+    99: "Thunderstorm",
+}
+
+_cached_location: tuple[str, float, float] | None = None
+
+
+def _geolocate() -> tuple[str, float, float]:
+    """IP geolocation via ip-api.com. Cached for the session."""
+    global _cached_location  # noqa: PLW0603
+    if _cached_location is not None:
+        return _cached_location
+    with urllib.request.urlopen(
+        "http://ip-api.com/json/?fields=city,lat,lon",
+        timeout=5,
+    ) as resp:
+        geo = json.loads(resp.read())
+    _cached_location = (geo["city"], geo["lat"], geo["lon"])
+    return _cached_location
+
+
 def get_weather() -> dict | None:
-    """Fetch weather from wttr.in. Returns dict or None on failure."""
+    """Fetch weather from Open-Meteo. Returns dict or None on failure."""
     try:
-        req = urllib.request.Request(
-            "https://wttr.in/?format=j1",
-            headers={"User-Agent": "driftwm-widget"},
+        city, lat, lon = _geolocate()
+        url = (
+            f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
+            "&current=temperature_2m,weather_code,relative_humidity_2m,apparent_temperature"
+            "&daily=temperature_2m_max,temperature_2m_min,weather_code"
+            "&timezone=auto&forecast_days=2"
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
+        with urllib.request.urlopen(url, timeout=10) as resp:  # noqa: S310
             data = json.loads(resp.read())
-        cur = data["current_condition"][0]
-        today = data["weather"][0]
-        tomorrow = data["weather"][1] if len(data["weather"]) > 1 else None
-        area = data.get("nearest_area", [{}])[0]
-        location = area.get("areaName", [{}])[0].get("value", "")
+        cur = data["current"]
+        daily = data["daily"]
+        code = cur["weather_code"]
+        tomorrow_code = (
+            daily["weather_code"][1] if len(daily["weather_code"]) > 1 else None
+        )
         return {
-            "location": location,
-            "temp": cur["temp_C"],
-            "feels": cur["FeelsLikeC"],
-            "desc": cur["weatherDesc"][0]["value"],
-            "humidity": cur["humidity"],
-            "high": today["maxtempC"],
-            "low": today["mintempC"],
-            "tomorrow_temp": tomorrow["avgtempC"] if tomorrow else "?",
-            "tomorrow_desc": (
-                tomorrow["hourly"][4]["weatherDesc"][0]["value"] if tomorrow else "?"
-            ),
+            "location": city,
+            "temp": str(round(cur["temperature_2m"])),
+            "feels": str(round(cur["apparent_temperature"])),
+            "desc": _WMO_DESC.get(code, "Cloudy"),
+            "humidity": str(cur["relative_humidity_2m"]),
+            "high": str(round(daily["temperature_2m_max"][0])),
+            "low": str(round(daily["temperature_2m_min"][0])),
+            "tomorrow_temp": str(
+                round(
+                    (daily["temperature_2m_max"][1] + daily["temperature_2m_min"][1])
+                    / 2,
+                ),
+            )
+            if len(daily["temperature_2m_max"]) > 1
+            else "?",
+            "tomorrow_desc": _WMO_DESC.get(tomorrow_code, "?")
+            if tomorrow_code is not None
+            else "?",
         }
     except Exception:
         return None
@@ -436,19 +491,6 @@ def get_bluetooth() -> str | None:
         count = len(devices)
         return f"{ICON['bt_connected']}  {name} ({count})"
     except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
-
-
-def get_wttr() -> str | None:
-    """Fetch wttr.in compact output with location. Returns raw text or None."""
-    try:
-        req = urllib.request.Request(
-            "https://wttr.in/?0QnT",
-            headers={"User-Agent": "curl/8.0"},
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
-            return resp.read().decode("utf-8")
-    except Exception:
         return None
 
 

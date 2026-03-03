@@ -3,11 +3,10 @@
 
 import time
 
+from common import get_weather, weather_icon
 from rich.console import Console
 from rich.live import Live
 from rich.text import Text
-
-from common import get_weather
 
 console = Console(width=22, highlight=False)
 
@@ -42,8 +41,9 @@ def render() -> Text:
         return text
 
     location = w.get("location", "")
+    icon = weather_icon(w["desc"])
     if location:
-        text.append(f"   {location.lower()}\n")
+        text.append(f"   {icon} {location.lower()}\n")
     text.append(f"   {w['temp']}\u00b0C", style="bold")
     text.append(f" {w['desc'].lower()}\n")
     text.append(f"   H:{w['high']}\u00b0  L:{w['low']}\u00b0\n")
