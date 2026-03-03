@@ -2,7 +2,7 @@
 
 autostart = [
     "gnome-keyring-daemon --start --components=secrets,pkcs11,ssh",
-    "dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE && systemctl --user start xdg-desktop-portal-gtk.service xdg-desktop-portal.service",
+    "systemctl --user start xdg-desktop-portal-gtk.service xdg-desktop-portal.service",
     "/usr/libexec/polkit-gnome-authentication-agent-1",
     "swayosd-server --top-margin 0.95",
     "blueman-applet",

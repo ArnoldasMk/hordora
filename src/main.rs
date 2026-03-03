@@ -86,6 +86,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe { std::env::set_var("GDK_BACKEND", "wayland,x11") };
     unsafe { std::env::set_var("ELECTRON_OZONE_PLATFORM_HINT", "wayland") };
 
+    // Propagate session env to D-Bus and systemd so D-Bus-activated apps
+    // (GNOME Text Editor, Loupe, etc.) can find our Wayland socket.
+    if let Err(e) = std::process::Command::new("dbus-update-activation-environment")
+        .args(["--systemd", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE"])
+        .spawn()
+    {
+        tracing::warn!("Failed to update D-Bus activation environment: {e}");
+    }
+
     event_loop
         .handle()
         .insert_source(listening_socket, |stream, _, data: &mut CalloopData| {
