@@ -546,6 +546,13 @@ impl DriftWm {
 
     /// Enter Swipe3Resize state: store initial geometry, set resize state + cursor.
     fn start_gesture_resize(&mut self, window: Window, pos: Point<f64, Logical>) {
+        self.space.raise_element(&window, true);
+        self.enforce_below_windows();
+        let serial = SERIAL_COUNTER.next_serial();
+        let keyboard = self.seat.get_keyboard().unwrap();
+        let surface = window.toplevel().unwrap().wl_surface().clone();
+        keyboard.set_focus(self, Some(FocusTarget(surface)), serial);
+
         let initial_location = self.space.element_location(&window).unwrap();
         let initial_size = window.geometry().size;
         let edges = edges_from_position(pos, initial_location, initial_size);

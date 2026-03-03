@@ -179,6 +179,10 @@ impl DriftWm {
                         {
                             let surface = window.toplevel().unwrap().wl_surface();
                             if !config::applied_rule(surface).is_some_and(|r| r.widget) {
+                                self.space.raise_element(&window, true);
+                                self.enforce_below_windows();
+                                let wl_surface = window.toplevel().unwrap().wl_surface().clone();
+                                keyboard.set_focus(self, Some(FocusTarget(wl_surface)), serial);
                                 let initial_window_location =
                                     self.space.element_location(&window).unwrap();
                                 let start_data = GrabStartData {
@@ -204,6 +208,10 @@ impl DriftWm {
                             && !config::applied_rule(window.toplevel().unwrap().wl_surface())
                                 .is_some_and(|r| r.widget)
                         {
+                            self.space.raise_element(&window, true);
+                            self.enforce_below_windows();
+                            let wl_surface = window.toplevel().unwrap().wl_surface().clone();
+                            keyboard.set_focus(self, Some(FocusTarget(wl_surface)), serial);
                             self.start_compositor_resize(
                                 &pointer, &window, pos, button, serial,
                             );
