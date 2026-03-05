@@ -41,7 +41,7 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the full specification.
 
 ## Features
 
-Early development — usable as a daily driver on single-monitor setups.
+Early development — usable as a daily driver.
 
 - Infinite 2D canvas with viewport panning, zoom, and scroll momentum
 - GPU-scaled zoom with cursor-anchored zoom and dynamic min-zoom
@@ -49,10 +49,11 @@ Early development — usable as a daily driver on single-monitor setups.
 - Layer shell support (waybar, fuzzel, mako) + foreign toplevel management
 - GLSL shader backgrounds or tiled images, scrolling with the viewport
 - Configurable trackpad gestures and mouse bindings with context-awareness (on-window/on-canvas/anywhere)
+- Multi-monitor with independent viewports, hotplug, and runtime output config (wlr-randr, wdisplays)
 - Runs nested (winit) or on real hardware (udev/DRM with libseat)
 - TOML config — all keybindings, mouse bindings, gesture bindings, and input settings are configurable
 - Server-side decorations with title bar, shadows, and resize borders for non-CSD apps
-- 20+ Wayland protocols: DMA-BUF, popups, clipboard, layer shell, and more
+- 22 Wayland protocols: DMA-BUF, popups, clipboard, layer shell, output management, and more
 
 ## Build & run
 
@@ -129,9 +130,8 @@ only specify what you want to change. Use `"none"` to unbind a default binding.
 10. **Trackpad gestures** — gesture state machine, libinput device config _(done)_
 11. **Window rules** — app*id matching, widget mode, state file, xdg-decoration *(done)\_
 12. **Decorations** — SSD fallback, title bar, shadows, resize grab zones _(done)_
-13. XWayland — X11 app support
-14. Screenshot/screencast — wlr-screencopy, screen capture
-15. Multi-monitor — multiple viewports on same canvas
+13. **Multi-monitor** — per-output viewports, input routing, hotplug, output config _(done)_
+14. XWayland — X11 app support
 
 ## License
 

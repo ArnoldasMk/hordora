@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 driftwm — a trackpad-first infinite canvas Wayland compositor written in Rust. Windows float on an unbounded 2D plane navigated via trackpad gestures (pan, zoom, pinch). No workspaces, no tiling. Built on [smithay](https://github.com/Smithay/smithay).
 
-The project is in early development (milestone 12 complete). See `docs/DESIGN.md` for the full specification and `docs/CAVEATS.md` for architectural pitfalls.
+The project is in early development (milestone 13 complete). See `docs/DESIGN.md` for the full specification and `docs/CAVEATS.md` for architectural pitfalls.
 
 ## Conventions
 
@@ -49,8 +49,8 @@ Current source layout:
 - `render.rs` — OutputRenderElements, compose_frame(), post_render(), update_background_element(), tile/cursor/layer rendering helpers
 - `input/` — `mod.rs` (keyboard handling, pointer motion absolute+relative, surface_under hit-testing), `actions.rs` (execute_action dispatch for all keybindings), `pointer.rs` (context-aware mouse dispatch, button/axis handling, compositor resize/pan grabs), `gestures.rs` (table-driven gesture dispatch from config, continuous/threshold state machine, libinput device config, client forwarding)
 - `grabs/` — `move_grab.rs` (MoveSurfaceGrab), `resize_grab.rs` (ResizeSurfaceGrab, ResizeState), `pan_grab.rs` (PanGrab for viewport panning), `navigate_grab.rs` (NavigateGrab for directional window navigation)
-- `handlers/` — `compositor.rs` (commit, resize repositioning, dmabuf, layer commit), `layer_shell.rs` (wlr-layer-shell handler), `xdg_shell.rs` (CSD move/resize, window centering, fullscreen, popup grabs), `mod.rs` (seat, data device, output, cursor_shape, foreign toplevel, session lock, xdg-decoration, 20+ protocol delegates)
-- `protocols/` — `foreign_toplevel.rs` (zwlr-foreign-toplevel-management-v1), `screencopy.rs` (wlr-screencopy)
+- `handlers/` — `compositor.rs` (commit, resize repositioning, dmabuf, layer commit), `layer_shell.rs` (wlr-layer-shell handler), `xdg_shell.rs` (CSD move/resize, window centering, fullscreen, popup grabs), `mod.rs` (seat, data device, output, cursor_shape, foreign toplevel, session lock, xdg-decoration, output management, 22 protocol delegates)
+- `protocols/` — `foreign_toplevel.rs` (zwlr-foreign-toplevel-management-v1), `output_management.rs` (zwlr-output-management-v1), `screencopy.rs` (wlr-screencopy)
 
 ## Key Design Decisions
 

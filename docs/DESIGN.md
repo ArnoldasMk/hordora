@@ -38,10 +38,11 @@ trackpad gestures. No workspaces, no tiling — just drift.
   - `ext-session-lock` — screen locking (swaylock)
   - `wlr-layer-shell` — status bars, launchers, overlays (waybar, fuzzel)
   - `zwlr-foreign-toplevel-management` — taskbar window switching
+  - `zwlr-output-management` — runtime output configuration (wlr-randr, wdisplays)
 
   Not yet implemented:
   - `ext-image-capture-source` + `ext-image-copy-capture` — newer screenshot/screencast capture (replaces wlr-screencopy, used by xdg-desktop-portal-wlr for OBS/Firefox screen share)
-  - XWayland — run X11 apps (milestone 13)
+  - XWayland — run X11 apps
 
 ## Core concept: infinite canvas
 
@@ -72,10 +73,8 @@ screen_h = h * z
 
 Multiple monitors = multiple independent viewports on the same canvas. Each
 monitor has its own camera `(cx, cy)` and zoom `z`. Panning/zooming on one
-monitor affects only that monitor's viewport. See
-[docs/multi-monitor.md](multi-monitor.md) for the full design: per-output state,
-pointer crossing, edge-zone boundaries, window dragging between monitors, output
-configuration, and the `zwlr-output-management` protocol.
+monitor affects only that monitor's viewport. Windows exist at canvas coordinates
+shared across all monitors.
 
 ```
 Monitor A: viewport at (0, 0) z=1.0    Monitor B: viewport at (3000, 500) z=0.5
@@ -86,6 +85,88 @@ Monitor A: viewport at (0, 0) z=1.0    Monitor B: viewport at (3000, 500) z=0.5
                                         └──────────────┘
               ← same infinite canvas →
 ```
+
+Monitors are cameras, not containers. Windows live on the canvas, not on
+monitors. Most compositor code doesn't need to know about multiple monitors —
+only the render pipeline and input routing do.
+
+### Per-output state
+
+Each output has independent viewport state (stored via smithay's `UserDataMap`
+on the `Output` object):
+
+- camera, zoom, zoom_target, zoom_animation_center, last_rendered_zoom
+- overview_return, camera_target
+- last_scroll_pan, momentum, panning, edge_pan_velocity
+- frame_counter, last_frame_instant, last_rendered_camera
+- layout_position, home_return
+- cached_bg_element (keyed by output name on DriftWm)
+- fullscreen (keyed by Output on DriftWm)
+- lock_surface (keyed by Output on DriftWm)
+
+Everything else is global: space, seat, config, focus_history, decorations,
+protocol states, gesture state, cursor state.
+
+### Pointer crossing
+
+The cursor crosses between monitors in screen space — move it off the right edge
+of monitor A and it appears on the left edge of monitor B. The cursor's canvas
+position changes discontinuously because the two viewports are looking at
+different canvas areas. Pointer crossing is free — no sticky boundary.
+
+### Dragging windows between monitors
+
+When dragging a window (`MoveSurfaceGrab`) and the cursor crosses to another
+monitor, the window's canvas position is adjusted to stay under the cursor
+relative to the new viewport's canvas space. A velocity threshold prevents
+accidental crossings during slow drags near edges — slow movement clamps at the
+boundary, fast movement breaks through.
+
+`SendToOutput` action (default: `Mod+Alt+Arrow`) moves the focused window's
+canvas position to the center of the target output's viewport.
+
+### Window placement and navigation
+
+- New windows open at the center of the **active output's** viewport
+- `center-nearest` direction search uses the active output's viewport
+- `zoom-to-fit` fits all windows within the active output's viewport
+- `home-toggle` returns the active output to origin / zoom 1.0
+- Layer shell surfaces bind to a specific output; unspecified → active output
+- Foreign toplevel activation pans the active output to the target window
+
+### Output configuration
+
+```toml
+[[outputs]]
+name = "eDP-1"           # connector name (required, find with wlr-randr)
+scale = 1.5              # fractional scale (default: 1.0)
+transform = "normal"     # normal, 90, 180, 270, flipped, flipped-90, etc.
+position = "auto"        # "auto" (default) or [x, y] in layout coords
+mode = "preferred"       # "preferred" (default) or "WxH" or "WxH@Hz"
+```
+
+`position = "auto"` arranges outputs left-to-right in connection order. The
+winit backend ignores `[[outputs]]` config (always one virtual output).
+
+The `zwlr-output-management-unstable-v1` protocol enables runtime output
+configuration via GUI tools (wdisplays) and CLI tools (wlr-randr). Runtime
+changes are ephemeral — use config.toml or kanshi for persistence.
+
+### Disconnect safety
+
+When all monitors disconnect, the compositor keeps the last output in the space
+as a virtual/disconnected placeholder. Renders are no-ops but all code that
+calls `active_output()` continues to work. When a monitor reconnects, the
+virtual output is replaced by the real one.
+
+### State file
+
+The state file has two layers:
+
+- **Flat keys** (`x`, `y`, `zoom`, etc.) — always reflect the active output's
+  viewport. Widgets read these without needing to know about multiple outputs.
+- **Per-output keys** (`outputs.eDP-1.camera_x`, etc.) — used for save/restore
+  on reconnect.
 
 ## Input
 
@@ -525,6 +606,7 @@ src/
 └── protocols/
     ├── mod.rs
     ├── foreign_toplevel.rs
+    ├── output_management.rs
     └── screencopy.rs
 ```
 
@@ -545,9 +627,8 @@ requiring real hardware (udev/TTY). Milestones 1–8 work entirely in winit.
 10. **Trackpad gestures** _(done)_
 11. **Window rules** — app_id matching, widget mode, state file, xdg-decoration _(done)_
 12. **Decorations** — SSD fallback, title bar, shadows, resize grab zones _(done)_
-13. XWayland — X11 app support
-14. Screenshot/screencast — wlr-screencopy, screen capture
-15. Multi-monitor — multiple viewports on same canvas
+13. **Multi-monitor** — per-output viewports, input routing, hotplug, output config, wlr-output-management _(done)_
+14. XWayland — X11 app support
 
 Separate project: **driftwm-shell** — GTK4 home screen + system widgets
 via Fabric (see Widgets section).
