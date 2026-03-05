@@ -107,6 +107,7 @@ impl DriftWm {
             let dt_entry = self.config.gesture_lookup(&mods, &dt_trigger, context).cloned();
             if let Some(entry) = dt_entry {
                 self.cancel_animations();
+                self.gesture_output = self.active_output();
                 match entry {
                     GestureConfigEntry::Continuous(ContinuousAction::MoveWindow) => {
                         if let Some((window, _)) = self.focusable_window_under(pos) {
@@ -144,6 +145,7 @@ impl DriftWm {
         match entry {
             Some(GestureConfigEntry::Continuous(action)) => {
                 self.cancel_animations();
+                self.gesture_output = self.active_output();
                 match action {
                     ContinuousAction::PanViewport => {
                         self.gesture_state = Some(GestureState::SwipePan);
@@ -174,6 +176,7 @@ impl DriftWm {
             }
             Some(GestureConfigEntry::Threshold(action)) => {
                 self.cancel_animations();
+                self.gesture_output = self.active_output();
                 self.gesture_state = Some(self.build_swipe_threshold(fingers, &mods, context, Some(action)));
             }
             None => {
@@ -181,6 +184,7 @@ impl DriftWm {
                 let has_dirs = self.has_swipe_direction_bindings(fingers, &mods, context);
                 if has_dirs {
                     self.cancel_animations();
+                    self.gesture_output = self.active_output();
                     self.gesture_state = Some(self.build_swipe_threshold(fingers, &mods, context, None));
                 } else {
                     self.forward_swipe_begin(fingers, time);
@@ -236,7 +240,7 @@ impl DriftWm {
     pub fn on_gesture_swipe_update<I: InputBackend>(&mut self, event: I::GestureSwipeUpdateEvent) {
         let delta = event.delta();
         let time = Event::time_msec(&event);
-        let zoom = self.zoom();
+        let (zoom, _) = self.gesture_camera_zoom();
 
         let Some(ref mut state) = self.gesture_state else {
             self.forward_swipe_update(delta, time);
@@ -247,7 +251,11 @@ impl DriftWm {
             GestureState::SwipePan => {
                 let canvas_delta: Point<f64, Logical> =
                     (-delta.x / zoom, -delta.y / zoom).into();
-                self.drift_pan(canvas_delta);
+                if let Some(output) = self.gesture_output.clone() {
+                    self.drift_pan_on(canvas_delta, &output);
+                } else {
+                    self.drift_pan(canvas_delta);
+                }
 
                 let pointer = self.seat.get_pointer().unwrap();
                 let pos = pointer.current_location();
@@ -329,6 +337,7 @@ impl DriftWm {
         let time = Event::time_msec(&event);
 
         let Some(state) = self.gesture_state.take() else {
+            self.gesture_output = None;
             self.forward_swipe_end(cancelled, time);
             return;
         };
@@ -376,6 +385,7 @@ impl DriftWm {
             }
             _ => {}
         }
+        self.gesture_output = None;
     }
 
     // ── Pinch ──────────────────────────────────────────────────────────
@@ -407,6 +417,7 @@ impl DriftWm {
             && matches!(entry, GestureConfigEntry::Continuous(ContinuousAction::Zoom))
         {
             self.cancel_animations();
+            self.gesture_output = self.active_output();
             self.gesture_state = Some(GestureState::PinchZoom {
                 initial_zoom: self.zoom(),
             });
@@ -457,15 +468,23 @@ impl DriftWm {
             GestureState::PinchZoom { initial_zoom } => {
                 let new_zoom = (*initial_zoom * scale).clamp(self.min_zoom(), canvas::MAX_ZOOM);
 
-                let cur_zoom = self.zoom();
+                let (cur_zoom, cur_camera) = self.gesture_camera_zoom();
                 if new_zoom != cur_zoom {
                     let pointer = self.seat.get_pointer().unwrap();
                     let pos = pointer.current_location();
-                    let screen_pos = canvas_to_screen(CanvasPos(pos), self.camera(), cur_zoom).0;
+                    let screen_pos = canvas_to_screen(CanvasPos(pos), cur_camera, cur_zoom).0;
 
-                    self.set_overview_return(None);
-                    self.set_camera(canvas::zoom_anchor_camera(pos, screen_pos, new_zoom));
-                    self.set_zoom(new_zoom);
+                    if let Some(ref output) = self.gesture_output {
+                        let mut os = crate::state::output_state(output);
+                        os.overview_return = None;
+                        os.camera = canvas::zoom_anchor_camera(pos, screen_pos, new_zoom);
+                        os.zoom = new_zoom;
+                        drop(os);
+                    } else {
+                        self.set_overview_return(None);
+                        self.set_camera(canvas::zoom_anchor_camera(pos, screen_pos, new_zoom));
+                        self.set_zoom(new_zoom);
+                    }
                     self.update_output_from_camera();
 
                     self.warp_pointer(pos);
@@ -499,20 +518,28 @@ impl DriftWm {
         let time = Event::time_msec(&event);
 
         let Some(state) = self.gesture_state.take() else {
+            self.gesture_output = None;
             self.forward_pinch_end(cancelled, time);
             return;
         };
 
         match state {
             GestureState::PinchZoom { .. } => {
-                let cur_zoom = self.zoom();
+                let (cur_zoom, cur_camera) = self.gesture_camera_zoom();
                 let snapped = canvas::snap_zoom(cur_zoom);
                 if snapped != cur_zoom {
                     let pointer = self.seat.get_pointer().unwrap();
                     let pos = pointer.current_location();
-                    let screen_pos = canvas_to_screen(CanvasPos(pos), self.camera(), cur_zoom).0;
-                    self.set_camera(canvas::zoom_anchor_camera(pos, screen_pos, snapped));
-                    self.set_zoom(snapped);
+                    let screen_pos = canvas_to_screen(CanvasPos(pos), cur_camera, cur_zoom).0;
+                    if let Some(ref output) = self.gesture_output {
+                        let mut os = crate::state::output_state(output);
+                        os.camera = canvas::zoom_anchor_camera(pos, screen_pos, snapped);
+                        os.zoom = snapped;
+                        drop(os);
+                    } else {
+                        self.set_camera(canvas::zoom_anchor_camera(pos, screen_pos, snapped));
+                        self.set_zoom(snapped);
+                    }
                     self.update_output_from_camera();
                     self.warp_pointer(pos);
                 }
@@ -525,6 +552,7 @@ impl DriftWm {
             }
             _ => {}
         }
+        self.gesture_output = None;
     }
 
     pub fn on_gesture_hold_begin<I: InputBackend>(&mut self, event: I::GestureHoldBeginEvent) {
@@ -635,6 +663,7 @@ impl DriftWm {
             window,
             initial_window_location,
             snap: SnapState::default(),
+            output: self.active_output().unwrap(),
         };
         pointer.set_grab(self, grab, serial, Focus::Clear);
 
@@ -709,6 +738,17 @@ impl DriftWm {
                 !driftwm::config::applied_rule(w.toplevel().unwrap().wl_surface())
                     .is_some_and(|r| r.no_focus)
             })
+    }
+
+    /// Read camera/zoom from the pinned gesture output, falling back to active output.
+    fn gesture_camera_zoom(&self) -> (f64, Point<f64, Logical>) {
+        match self.gesture_output {
+            Some(ref o) => {
+                let os = crate::state::output_state(o);
+                (os.zoom, os.camera)
+            }
+            None => (self.zoom(), self.camera()),
+        }
     }
 
     fn cancel_animations(&mut self) {

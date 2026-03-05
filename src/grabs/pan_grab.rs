@@ -5,12 +5,13 @@ use smithay::{
         },
         SeatHandler,
     },
+    output::Output,
     utils::{Logical, Point, SERIAL_COUNTER},
 };
 
 use driftwm::canvas::{CanvasPos, canvas_to_screen};
 use crate::focus::FocusTarget;
-use crate::state::DriftWm;
+use crate::state::{DriftWm, output_state};
 
 /// Max squared screen-pixel distance for a press-release to count as a
 /// "click" (deselect) rather than a "drag" (pan). 5px → 25.
@@ -31,6 +32,8 @@ pub struct PanGrab {
     pub from_empty_canvas: bool,
     /// Set to true once pointer moves beyond CLICK_THRESHOLD from start.
     pub dragged: bool,
+    /// Output this grab is pinned to (uses its camera/zoom throughout).
+    pub output: Output,
 }
 
 impl PointerGrab<DriftWm> for PanGrab {
@@ -41,14 +44,17 @@ impl PointerGrab<DriftWm> for PanGrab {
         _focus: Option<(<DriftWm as SeatHandler>::PointerFocus, Point<f64, Logical>)>,
         event: &MotionEvent,
     ) {
-        // Recover screen position from canvas coords
-        let current_screen_pos = canvas_to_screen(CanvasPos(event.location), data.camera(), data.zoom()).0;
+        // Use pinned output's camera/zoom
+        let (camera, zoom) = {
+            let os = output_state(&self.output);
+            (os.camera, os.zoom)
+        };
+        let current_screen_pos = canvas_to_screen(CanvasPos(event.location), camera, zoom).0;
         let screen_delta = current_screen_pos - self.last_screen_pos;
 
         // Dragging right → camera decreases → negate; convert screen→canvas delta
-        let zoom = data.zoom();
         let camera_delta = Point::from((-screen_delta.x / zoom, -screen_delta.y / zoom));
-        data.drift_pan(camera_delta);
+        data.drift_pan_on(camera_delta, &self.output);
         self.last_screen_pos = current_screen_pos;
 
         // Track whether we've moved enough to count as a drag

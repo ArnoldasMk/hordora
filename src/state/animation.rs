@@ -99,6 +99,7 @@ impl DriftWm {
 
     /// Apply a viewport pan delta with momentum accumulation.
     /// Call this from any input path that should drift (scroll, click-drag, future gestures).
+    /// Targets the active output (where the pointer is).
     pub fn drift_pan(&mut self, delta: Point<f64, Logical>) {
         self.with_output_state(|os| {
             os.camera_target = None;
@@ -109,6 +110,22 @@ impl DriftWm {
             os.camera.x += delta.x;
             os.camera.y += delta.y;
         });
+        self.update_output_from_camera();
+    }
+
+    /// Apply a viewport pan delta on a specific output (for grabs pinned to an output).
+    pub fn drift_pan_on(&mut self, delta: Point<f64, Logical>, output: &smithay::output::Output) {
+        {
+            let mut os = super::output_state(output);
+            os.camera_target = None;
+            os.zoom_target = None;
+            os.zoom_animation_center = None;
+            os.overview_return = None;
+            let fc = os.frame_counter;
+            os.momentum.accumulate(delta, fc);
+            os.camera.x += delta.x;
+            os.camera.y += delta.y;
+        }
         self.update_output_from_camera();
     }
 

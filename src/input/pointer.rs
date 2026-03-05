@@ -167,6 +167,7 @@ impl DriftWm {
                                 window,
                                 initial_window_location,
                                 snap: SnapState::default(),
+                                output: self.active_output().unwrap(),
                             };
                             pointer.set_grab(self, grab, serial, Focus::Clear);
                             return;
@@ -222,6 +223,7 @@ impl DriftWm {
                                     window,
                                     initial_window_location,
                                     snap: SnapState::default(),
+                                    output: self.active_output().unwrap(),
                                 };
                                 pointer.set_grab(self, grab, serial, Focus::Clear);
                                 return;
@@ -260,7 +262,7 @@ impl DriftWm {
                             button,
                             location: pos,
                         };
-                        let grab = NavigateGrab::new(start_data, screen_pos);
+                        let grab = NavigateGrab::new(start_data, screen_pos, self.active_output().unwrap());
                         pointer.set_grab(self, grab, serial, Focus::Clear);
                         return;
                     }
@@ -529,6 +531,7 @@ impl DriftWm {
             start_screen_pos: screen_pos,
             from_empty_canvas,
             dragged: false,
+            output: self.active_output().unwrap(),
         }
     }
 }

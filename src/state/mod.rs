@@ -166,10 +166,13 @@ pub struct OutputState {
     pub edge_pan_velocity: Option<Point<f64, Logical>>,
     pub last_rendered_camera: Point<f64, Logical>,
     pub last_frame_instant: Instant,
+    /// Physical arrangement position in layout space.
+    /// (0,0) for single output; from config for multi-monitor.
+    pub layout_position: Point<i32, Logical>,
 }
 
 /// Initialize per-output state on a newly created output.
-pub fn init_output_state(output: &Output, camera: Point<f64, Logical>, friction: f64) {
+pub fn init_output_state(output: &Output, camera: Point<f64, Logical>, friction: f64, layout_position: Point<i32, Logical>) {
     if output.user_data().get::<Mutex<OutputState>>().is_some() {
         tracing::warn!("OutputState already initialized for output, skipping");
         return;
@@ -192,6 +195,7 @@ pub fn init_output_state(output: &Output, camera: Point<f64, Logical>, friction:
                 edge_pan_velocity: None,
                 last_rendered_camera: Point::from((f64::NAN, f64::NAN)),
                 last_frame_instant: Instant::now(),
+                layout_position,
             })
         });
 }
@@ -334,6 +338,12 @@ pub struct DriftWm {
 
     // -- global: config hot-reload --
     pub config_file_mtime: Option<std::time::SystemTime>,
+
+    // -- global: multi-monitor --
+    /// The output the pointer is currently on (for input routing).
+    pub focused_output: Option<Output>,
+    /// The output a gesture started on (pinned for duration of gesture).
+    pub gesture_output: Option<Output>,
 }
 
 /// Per-client state stored by wayland-server for each connected client.
@@ -469,6 +479,8 @@ impl DriftWm {
             exec_cursor_show_at: None,
             exec_cursor_deadline: None,
             config_file_mtime: None,
+            focused_output: None,
+            gesture_output: None,
         }
     }
 
@@ -516,15 +528,15 @@ impl DriftWm {
 
     /// True if any animation is still in progress and needs continued rendering.
     pub fn has_active_animations(&self) -> bool {
-        let per_output = self.active_output().is_some_and(|output| {
-            let os = output_state(&output);
+        let any_output = self.space.outputs().any(|output| {
+            let os = output_state(output);
             os.camera_target.is_some()
                 || os.zoom_target.is_some()
                 || os.edge_pan_velocity.is_some()
                 || os.momentum.velocity.x != 0.0
                 || os.momentum.velocity.y != 0.0
         });
-        per_output
+        any_output
             || self.held_action.is_some()
             || self.exec_cursor_show_at.is_some()
             || self.exec_cursor_deadline.is_some()
@@ -568,10 +580,64 @@ impl DriftWm {
         self.flush_middle_click(pending.press_time, pending.release_time);
     }
 
-    /// The output the pointer is currently on. For Phase 1 (single monitor),
-    /// returns the first (only) output.
+    /// The output the pointer is currently on.
+    /// Returns `focused_output` with fallback to first output.
     pub fn active_output(&self) -> Option<Output> {
-        self.space.outputs().next().cloned()
+        self.focused_output
+            .clone()
+            .or_else(|| self.space.outputs().next().cloned())
+    }
+
+    /// Find which output's layout rectangle contains `pos` in layout space.
+    /// Uses `layout_position` + output mode size (NOT `space.output_geometry()`).
+    pub fn output_at_layout_pos(&self, pos: Point<f64, Logical>) -> Option<Output> {
+        self.space.outputs().find(|output| {
+            let os = output_state(output);
+            let lp = os.layout_position;
+            drop(os);
+            let size = output
+                .current_mode()
+                .map(|m| m.size.to_logical(1))
+                .unwrap_or((1, 1).into());
+            pos.x >= lp.x as f64
+                && pos.x < (lp.x + size.w) as f64
+                && pos.y >= lp.y as f64
+                && pos.y < (lp.y + size.h) as f64
+        }).cloned()
+    }
+
+    /// Convert canvas position to layout position via an output's camera/zoom.
+    /// layout_pos = (canvas - camera) * zoom + layout_position
+    pub fn canvas_to_layout_pos(
+        canvas_pos: Point<f64, Logical>,
+        os: &OutputState,
+    ) -> Point<f64, Logical> {
+        let screen = driftwm::canvas::canvas_to_screen(
+            driftwm::canvas::CanvasPos(canvas_pos),
+            os.camera,
+            os.zoom,
+        ).0;
+        Point::from((
+            screen.x + os.layout_position.x as f64,
+            screen.y + os.layout_position.y as f64,
+        ))
+    }
+
+    /// Convert layout position to canvas position via an output's camera/zoom.
+    /// canvas = (layout_pos - layout_position) / zoom + camera
+    pub fn layout_to_canvas_pos(
+        layout_pos: Point<f64, Logical>,
+        os: &OutputState,
+    ) -> Point<f64, Logical> {
+        let screen = Point::from((
+            layout_pos.x - os.layout_position.x as f64,
+            layout_pos.y - os.layout_position.y as f64,
+        ));
+        driftwm::canvas::screen_to_canvas(
+            driftwm::canvas::ScreenPos(screen),
+            os.camera,
+            os.zoom,
+        ).0
     }
 
     /// Batch-access per-output state under a single mutex lock.
@@ -606,12 +672,6 @@ impl DriftWm {
     }
     pub fn set_zoom_animation_center(&mut self, val: Option<Point<f64, Logical>>) {
         output_state(&self.active_output().unwrap()).zoom_animation_center = val;
-    }
-    pub fn last_rendered_zoom(&self) -> f64 {
-        output_state(&self.active_output().unwrap()).last_rendered_zoom
-    }
-    pub fn set_last_rendered_zoom(&mut self, val: f64) {
-        output_state(&self.active_output().unwrap()).last_rendered_zoom = val;
     }
     pub fn overview_return(&self) -> Option<(Point<f64, Logical>, f64)> {
         output_state(&self.active_output().unwrap()).overview_return
@@ -649,12 +709,6 @@ impl DriftWm {
     pub fn set_edge_pan_velocity(&mut self, val: Option<Point<f64, Logical>>) {
         output_state(&self.active_output().unwrap()).edge_pan_velocity = val;
     }
-    pub fn last_rendered_camera(&self) -> Point<f64, Logical> {
-        output_state(&self.active_output().unwrap()).last_rendered_camera
-    }
-    pub fn set_last_rendered_camera(&mut self, val: Point<f64, Logical>) {
-        output_state(&self.active_output().unwrap()).last_rendered_camera = val;
-    }
     pub fn last_frame_instant(&self) -> Instant {
         output_state(&self.active_output().unwrap()).last_frame_instant
     }
@@ -671,12 +725,9 @@ impl DriftWm {
         }
     }
 
-    /// Logical viewport size from the first output.
-    /// single-output assumption: returns size of the first output only.
+    /// Logical viewport size of the active (pointer-focused) output.
     pub fn get_viewport_size(&self) -> Size<i32, Logical> {
-        self.space
-            .outputs()
-            .next()
+        self.active_output()
             .and_then(|o| o.current_mode())
             .map(|m| m.size.to_logical(1))
             .unwrap_or((1, 1).into())
@@ -793,11 +844,11 @@ impl DriftWm {
             keyboard.change_repeat_info(new_config.repeat_delay, new_config.repeat_rate);
         }
 
-        // Momentum friction
-        if new_config.friction != self.config.friction
-            && let Some(output) = self.active_output()
-        {
-            output_state(&output).momentum.friction = new_config.friction;
+        // Momentum friction — apply to all outputs
+        if new_config.friction != self.config.friction {
+            for output in self.space.outputs() {
+                output_state(output).momentum.friction = new_config.friction;
+            }
         }
 
         // Background shader/tile — clear cached state for lazy re-init
@@ -924,5 +975,98 @@ pub fn remove_state_file() {
     if let Some(dir) = state_file_dir() {
         let _ = std::fs::remove_file(dir.join("state"));
         let _ = std::fs::remove_file(dir.join("state.tmp"));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use driftwm::canvas::MomentumState;
+
+    fn mock_output_state(
+        camera: (f64, f64),
+        zoom: f64,
+        layout_position: (i32, i32),
+    ) -> OutputState {
+        OutputState {
+            camera: Point::from(camera),
+            zoom,
+            zoom_target: None,
+            zoom_animation_center: None,
+            last_rendered_zoom: zoom,
+            overview_return: None,
+            camera_target: None,
+            last_scroll_pan: None,
+            momentum: MomentumState::new(0.96),
+            frame_counter: 0,
+            panning: false,
+            edge_pan_velocity: None,
+            last_rendered_camera: Point::from(camera),
+            last_frame_instant: Instant::now(),
+            layout_position: Point::from(layout_position),
+        }
+    }
+
+    #[test]
+    fn canvas_to_layout_round_trip_zoom_1() {
+        let os = mock_output_state((100.0, 200.0), 1.0, (0, 0));
+        let canvas = Point::from((150.0, 250.0));
+        let layout = DriftWm::canvas_to_layout_pos(canvas, &os);
+        let back = DriftWm::layout_to_canvas_pos(layout, &os);
+        assert!((back.x - canvas.x).abs() < 0.001);
+        assert!((back.y - canvas.y).abs() < 0.001);
+    }
+
+    #[test]
+    fn canvas_to_layout_round_trip_with_zoom() {
+        let os = mock_output_state((50.0, 75.0), 2.0, (1920, 0));
+        let canvas = Point::from((80.0, 100.0));
+        let layout = DriftWm::canvas_to_layout_pos(canvas, &os);
+        let back = DriftWm::layout_to_canvas_pos(layout, &os);
+        assert!((back.x - canvas.x).abs() < 0.001);
+        assert!((back.y - canvas.y).abs() < 0.001);
+    }
+
+    #[test]
+    fn canvas_to_layout_known_values() {
+        // camera=(100,200), zoom=2, layout_position=(1920,0)
+        // screen = (canvas - camera) * zoom = (50-100)*2 = -100, (50-200)*2 = -300
+        // layout = screen + layout_position = -100+1920 = 1820, -300+0 = -300
+        let os = mock_output_state((100.0, 200.0), 2.0, (1920, 0));
+        let canvas = Point::from((50.0, 50.0));
+        let layout = DriftWm::canvas_to_layout_pos(canvas, &os);
+        assert!((layout.x - 1820.0).abs() < 0.001);
+        assert!((layout.y - (-300.0)).abs() < 0.001);
+    }
+
+    #[test]
+    fn layout_to_canvas_known_values() {
+        // layout=(1920,0), layout_position=(1920,0), zoom=1, camera=(500,300)
+        // screen = layout - layout_position = (0, 0)
+        // canvas = screen / zoom + camera = 0 + 500 = 500, 0 + 300 = 300
+        let os = mock_output_state((500.0, 300.0), 1.0, (1920, 0));
+        let layout = Point::from((1920.0, 0.0));
+        let canvas = DriftWm::layout_to_canvas_pos(layout, &os);
+        assert!((canvas.x - 500.0).abs() < 0.001);
+        assert!((canvas.y - 300.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn round_trip_two_outputs_different_cameras() {
+        let os_a = mock_output_state((0.0, 0.0), 1.0, (0, 0));
+        let os_b = mock_output_state((500.0, 200.0), 0.5, (1920, 0));
+
+        let canvas = Point::from((600.0, 300.0));
+        // Through output A
+        let layout_a = DriftWm::canvas_to_layout_pos(canvas, &os_a);
+        let back_a = DriftWm::layout_to_canvas_pos(layout_a, &os_a);
+        assert!((back_a.x - canvas.x).abs() < 0.001);
+        assert!((back_a.y - canvas.y).abs() < 0.001);
+
+        // Through output B
+        let layout_b = DriftWm::canvas_to_layout_pos(canvas, &os_b);
+        let back_b = DriftWm::layout_to_canvas_pos(layout_b, &os_b);
+        assert!((back_b.x - canvas.x).abs() < 0.001);
+        assert!((back_b.y - canvas.y).abs() < 0.001);
     }
 }

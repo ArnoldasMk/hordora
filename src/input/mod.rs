@@ -207,9 +207,8 @@ impl DriftWm {
         &mut self,
         event: I::PointerMotionAbsoluteEvent,
     ) {
-        // single-output assumption: uses first output for coordinate transform
-        let output = match self.space.outputs().next() {
-            Some(o) => o.clone(),
+        let output = match self.active_output() {
+            Some(o) => o,
             None => return,
         };
         let output_geo = self.space.output_geometry(&output).unwrap();
@@ -280,8 +279,8 @@ impl DriftWm {
     }
 
     /// Handle relative pointer motion (libinput mice/trackpads).
-    /// Converts screen-space delta to canvas-space via zoom, then dispatches
-    /// the same layered hit-testing as absolute motion.
+    /// Multi-monitor aware: converts to layout space for output crossing,
+    /// then to target output's canvas coords.
     fn on_pointer_motion_relative<I: InputBackend>(
         &mut self,
         event: I::PointerMotionEvent,
@@ -307,38 +306,89 @@ impl DriftWm {
         let old_canvas = pointer.current_location();
         let serial = SERIAL_COUNTER.next_serial();
         let time = Event::time_msec(&event);
-
-        // Delta is in screen pixels — convert to canvas delta
         let delta = event.delta();
-        let canvas_delta: Point<f64, smithay::utils::Logical> =
-            (delta.x / self.zoom(), delta.y / self.zoom()).into();
-        let canvas_pos = old_canvas + canvas_delta;
 
-        // single-output assumption: clamps to first output bounds
-        let output = match self.space.outputs().next() {
-            Some(o) => o.clone(),
+        let cur_output = match self.active_output() {
+            Some(o) => o,
             None => return,
         };
-        let output_size = output
+
+        // Read current output's state
+        let (cur_camera, cur_zoom, cur_layout_pos) = {
+            let os = crate::state::output_state(&cur_output);
+            (os.camera, os.zoom, os.layout_position)
+        };
+
+        let output_size = cur_output
             .current_mode()
             .map(|m| m.size.to_logical(1))
             .unwrap_or((1, 1).into());
-        let cur_camera = self.camera();
-        let cur_zoom = self.zoom();
-        let screen_pos = driftwm::canvas::canvas_to_screen(
-            driftwm::canvas::CanvasPos(canvas_pos),
-            cur_camera,
-            cur_zoom,
+
+        // Convert old canvas pos to screen pos, add layout_position → old layout pos
+        let old_screen = driftwm::canvas::canvas_to_screen(
+            driftwm::canvas::CanvasPos(old_canvas), cur_camera, cur_zoom,
         ).0;
-        let clamped_screen: Point<f64, smithay::utils::Logical> = (
-            screen_pos.x.clamp(0.0, output_size.w as f64 - 1.0),
-            screen_pos.y.clamp(0.0, output_size.h as f64 - 1.0),
+        let old_layout: Point<f64, smithay::utils::Logical> = Point::from((
+            old_screen.x + cur_layout_pos.x as f64,
+            old_screen.y + cur_layout_pos.y as f64,
+        ));
+
+        // Add delta to get new layout pos (libinput deltas are logical pixels = layout space)
+        let new_layout: Point<f64, smithay::utils::Logical> = (
+            old_layout.x + delta.x,
+            old_layout.y + delta.y,
         ).into();
+
+        // Find target output at new layout pos
+        let (target_output, screen_pos) = if let Some(target) = self.output_at_layout_pos(new_layout) {
+            if target != cur_output {
+                // Output crossing — check sticky boundary
+                let speed = (delta.x * delta.x + delta.y * delta.y).sqrt();
+                let threshold = self.config.edge_zone * 0.3;
+                if speed < threshold {
+                    // Slow movement: clamp to current output edge
+                    let clamped: Point<f64, smithay::utils::Logical> = (
+                        (old_screen.x + delta.x).clamp(0.0, output_size.w as f64 - 1.0),
+                        (old_screen.y + delta.y).clamp(0.0, output_size.h as f64 - 1.0),
+                    ).into();
+                    (cur_output.clone(), clamped)
+                } else {
+                    // Fast movement: cross to target output
+                    let target_lp = crate::state::output_state(&target).layout_position;
+                    let target_screen: Point<f64, smithay::utils::Logical> = (
+                        new_layout.x - target_lp.x as f64,
+                        new_layout.y - target_lp.y as f64,
+                    ).into();
+                    (target, target_screen)
+                }
+            } else {
+                // Same output — compute screen pos within it
+                let screen: Point<f64, smithay::utils::Logical> = (
+                    new_layout.x - cur_layout_pos.x as f64,
+                    new_layout.y - cur_layout_pos.y as f64,
+                ).into();
+                (cur_output.clone(), screen)
+            }
+        } else {
+            // No output at new pos → clamp to current output
+            let clamped: Point<f64, smithay::utils::Logical> = (
+                (old_screen.x + delta.x).clamp(0.0, output_size.w as f64 - 1.0),
+                (old_screen.y + delta.y).clamp(0.0, output_size.h as f64 - 1.0),
+            ).into();
+            (cur_output.clone(), clamped)
+        };
+
+        // Convert target-output-local screen pos to canvas via target's camera/zoom
+        let (target_camera, target_zoom) = {
+            let os = crate::state::output_state(&target_output);
+            (os.camera, os.zoom)
+        };
         let canvas_pos = driftwm::canvas::screen_to_canvas(
-            ScreenPos(clamped_screen),
-            cur_camera,
-            cur_zoom,
+            ScreenPos(screen_pos), target_camera, target_zoom,
         ).0;
+
+        // Update focused_output
+        self.focused_output = Some(target_output);
 
         // Emit relative motion event for clients that use zwp_relative_pointer
         pointer.relative_motion(
@@ -352,7 +402,7 @@ impl DriftWm {
         );
 
         // Hit-test layers then canvas (same as absolute motion)
-        if let Some(hit) = self.layer_surface_under(clamped_screen, canvas_pos, &[WlrLayer::Overlay, WlrLayer::Top]) {
+        if let Some(hit) = self.layer_surface_under(screen_pos, canvas_pos, &[WlrLayer::Overlay, WlrLayer::Top]) {
             self.pointer_over_layer = true;
             pointer.motion(self, Some(hit), &MotionEvent { location: canvas_pos, serial, time });
             pointer.frame(self);
@@ -375,7 +425,7 @@ impl DriftWm {
             return;
         }
 
-        if let Some(hit) = self.layer_surface_under(clamped_screen, canvas_pos, &[WlrLayer::Bottom, WlrLayer::Background]) {
+        if let Some(hit) = self.layer_surface_under(screen_pos, canvas_pos, &[WlrLayer::Bottom, WlrLayer::Background]) {
             self.pointer_over_layer = true;
             pointer.motion(self, Some(hit), &MotionEvent { location: canvas_pos, serial, time });
             pointer.frame(self);
@@ -576,8 +626,8 @@ impl DriftWm {
         canvas_pos: Point<f64, smithay::utils::Logical>,
         layers: &[WlrLayer],
     ) -> Option<(FocusTarget, Point<f64, smithay::utils::Logical>)> {
-        // single-output assumption: checks layers on first output only
-        let output = self.space.outputs().next()?;
+        let output = self.active_output()?;
+        let output = &output;
         let map = layer_map_for_output(output);
         for &layer in layers {
             if let Some(surface) = map.layer_under(layer, screen_pos) {

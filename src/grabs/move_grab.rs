@@ -6,6 +6,7 @@ use smithay::{
         },
         SeatHandler,
     },
+    output::Output,
     reexports::wayland_server::Resource,
     utils::{Logical, Point},
 };
@@ -13,13 +14,15 @@ use smithay::{
 use driftwm::canvas::{CanvasPos, canvas_to_screen};
 use driftwm::config;
 use driftwm::snap::{SnapRect, SnapParams, SnapState, update_axis};
-use crate::state::DriftWm;
+use crate::state::{DriftWm, output_state};
 
 pub struct MoveSurfaceGrab {
     pub start_data: GrabStartData<DriftWm>,
     pub window: Window,
     pub initial_window_location: Point<i32, Logical>,
     pub snap: SnapState,
+    /// Output this grab is pinned to (uses its camera/zoom throughout).
+    pub output: Output,
 }
 
 
@@ -165,11 +168,14 @@ impl PointerGrab<DriftWm> for MoveSurfaceGrab {
         data.space.map_element(self.window.clone(), new_loc, false);
         handle.motion(data, None, event);
 
-        // Edge auto-pan detection
-        // single-output assumption: edge detection uses first output size
-        let screen_pos = canvas_to_screen(CanvasPos(event.location), data.camera(), data.zoom()).0;
-        let output_size = data.space.outputs().next()
-            .and_then(|o| o.current_mode())
+        // Edge auto-pan detection using pinned output
+        let (camera, zoom) = {
+            let os = output_state(&self.output);
+            (os.camera, os.zoom)
+        };
+        let screen_pos = canvas_to_screen(CanvasPos(event.location), camera, zoom).0;
+        let output_size = self.output
+            .current_mode()
             .map(|m| m.size.to_logical(1));
 
         if let Some(size) = output_size {

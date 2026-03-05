@@ -63,8 +63,7 @@ impl WlrLayerShellHandler for DriftWm {
                 })
             })
             .cloned()
-            // single-output assumption: falls back to first output
-            .or_else(|| self.space.outputs().next().cloned());
+            .or_else(|| self.active_output());
 
         let Some(resolved_output) = resolved_output else {
             tracing::warn!("No output available for layer surface");

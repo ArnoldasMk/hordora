@@ -35,12 +35,9 @@ impl XdgShellHandler for DriftWm {
 
         // Place at screen center (no size offset — size unknown until first commit).
         // The pending_center set will trigger proper centering once size is known.
-        // single-output assumption: centers window on first output
         let pos = self
-            .space
-            .outputs()
-            .next()
-            .and_then(|o| self.space.output_geometry(o))
+            .active_output()
+            .and_then(|o| self.space.output_geometry(&o))
             .map(|geo| {
                 { let cam = self.camera(); let z = self.zoom();
                 ((cam.x + geo.size.w as f64 / (2.0 * z)) as i32,
@@ -217,6 +214,7 @@ impl XdgShellHandler for DriftWm {
             window,
             initial_window_location,
             snap: SnapState::default(),
+            output: self.active_output().unwrap(),
         };
         pointer.set_grab(self, grab, serial, Focus::Clear);
     }
@@ -361,8 +359,7 @@ impl DriftWm {
             target
         } else {
             // Parent is a layer surface — find it in the layer map
-            // single-output assumption: uses first output for layer lookup
-            let output = self.space.outputs().next().cloned();
+            let output = self.active_output();
             let output = match output {
                 Some(o) => o,
                 None => return,

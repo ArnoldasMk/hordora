@@ -5,13 +5,14 @@ use smithay::{
         },
         SeatHandler,
     },
+    output::Output,
     utils::{Logical, Point},
 };
 
 use driftwm::canvas::{CanvasPos, canvas_to_screen};
 use driftwm::config::Action;
 use crate::input::gestures::direction_from_vector;
-use crate::state::DriftWm;
+use crate::state::{DriftWm, output_state};
 
 /// Squared pixel threshold before a direction is chosen (same as 4-finger swipe).
 const THRESHOLD_SQ: f64 = 16.0 * 16.0;
@@ -24,18 +25,22 @@ pub struct NavigateGrab {
     last_screen_pos: Point<f64, Logical>,
     cumulative: Point<f64, Logical>,
     fired: bool,
+    /// Output this grab is pinned to (uses its camera/zoom throughout).
+    pub output: Output,
 }
 
 impl NavigateGrab {
     pub fn new(
         start_data: GrabStartData<DriftWm>,
         screen_pos: Point<f64, Logical>,
+        output: Output,
     ) -> Self {
         Self {
             start_data,
             last_screen_pos: screen_pos,
             cumulative: Point::from((0.0, 0.0)),
             fired: false,
+            output,
         }
     }
 }
@@ -48,7 +53,11 @@ impl PointerGrab<DriftWm> for NavigateGrab {
         _focus: Option<(<DriftWm as SeatHandler>::PointerFocus, Point<f64, Logical>)>,
         event: &MotionEvent,
     ) {
-        let current_screen = canvas_to_screen(CanvasPos(event.location), data.camera(), data.zoom()).0;
+        let (camera, zoom) = {
+            let os = output_state(&self.output);
+            (os.camera, os.zoom)
+        };
+        let current_screen = canvas_to_screen(CanvasPos(event.location), camera, zoom).0;
         let screen_delta = current_screen - self.last_screen_pos;
         self.last_screen_pos = current_screen;
 

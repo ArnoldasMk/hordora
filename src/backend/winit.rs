@@ -79,7 +79,8 @@ pub fn init_winit(
     ));
 
     // Initialize per-output state for this output
-    init_output_state(&output, initial_camera, data.state.config.friction);
+    init_output_state(&output, initial_camera, data.state.config.friction, Point::from((0, 0)));
+    data.state.focused_output = Some(output.clone());
 
     // Map the output into the space at the initial camera position
     data.state
@@ -155,9 +156,15 @@ pub fn init_winit(
             // --- Exec loading cursor timeout ---
             data.state.check_exec_cursor_timeout();
 
+            // --- Read per-output state for this frame ---
+            let (cur_camera, cur_zoom, last_cam, last_zoom) = {
+                let os = crate::state::output_state(&output);
+                (os.camera, os.zoom, os.last_rendered_camera, os.last_rendered_zoom)
+            };
+
             // --- Update cached background element ---
             let (camera_moved, zoom_changed) =
-                crate::render::update_background_element(&mut data.state, &output);
+                crate::render::update_background_element(&mut data.state, &output, cur_camera, cur_zoom, last_cam, last_zoom);
 
             // --- Take backend to split borrow from state ---
             let Backend::Winit(mut backend) = data.state.backend.take().unwrap()  else {
@@ -165,7 +172,7 @@ pub fn init_winit(
             };
 
             // --- Build cursor + compose frame ---
-            let cursor_elements = build_cursor_elements(&mut data.state, backend.renderer());
+            let cursor_elements = build_cursor_elements(&mut data.state, backend.renderer(), cur_camera, cur_zoom);
             let mut age = backend.buffer_age().unwrap_or(0);
             if data.state.background_tile.is_some() && (camera_moved || zoom_changed) {
                 age = 0;
@@ -197,8 +204,11 @@ pub fn init_winit(
             }
 
             // --- Record camera+zoom for next-frame change detection ---
-            data.state.set_last_rendered_camera(data.state.camera());
-            data.state.set_last_rendered_zoom(data.state.zoom());
+            {
+                let mut os = crate::state::output_state(&output);
+                os.last_rendered_camera = os.camera;
+                os.last_rendered_zoom = os.zoom;
+            }
             data.state.write_state_file_if_dirty();
 
             // --- Put backend back ---

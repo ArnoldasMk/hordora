@@ -287,7 +287,7 @@ pub fn init_udev(
     }
 
     // 7. Compile background shader / load tile (shared with winit)
-    // single-output assumption: uses first surface's mode for initial background size
+    // Uses first surface's mode for initial background element size (resized per-frame anyway)
     let initial_size = device_surfaces
         .values()
         .next()
@@ -585,14 +585,23 @@ fn create_surface(
     let transform = output_cfg
         .and_then(|c| c.transform)
         .unwrap_or(Transform::Normal);
-    if let Some(cfg) = output_cfg
-        && cfg.position != OutputPosition::Auto
-    {
-        tracing::info!(
-            "Output {connector_name}: position {:?} (will apply in multi-monitor phase)",
-            cfg.position
-        );
-    }
+    // Compute layout position from config
+    let layout_position: smithay::utils::Point<i32, smithay::utils::Logical> = match output_cfg.map(|c| &c.position) {
+        Some(OutputPosition::Fixed(x, y)) => {
+            tracing::info!("Output {connector_name}: layout position ({x}, {y}) from config");
+            (*x, *y).into()
+        }
+        _ => {
+            // Auto: place left-to-right by connection order
+            let auto_x: i32 = state.space.outputs().map(|o| {
+                o.current_mode()
+                    .map(|m| m.size.to_logical(1).w)
+                    .unwrap_or(0)
+            }).sum();
+            tracing::info!("Output {connector_name}: auto layout position ({auto_x}, 0)");
+            (auto_x, 0).into()
+        }
+    };
     output.change_current_state(Some(output_mode), Some(transform), Some(scale), None);
     output.set_preferred(output_mode);
     output.create_global::<DriftWm>(dh);
@@ -656,18 +665,19 @@ fn create_surface(
         }
     };
 
-    // single-output assumption: sets initial camera from first output only
-    let camera = if state.space.outputs().next().is_none() {
-        let logical_size = output_mode.size.to_logical(1);
-        smithay::utils::Point::from((
-            -(logical_size.w as f64) / 2.0,
-            -(logical_size.h as f64) / 2.0,
-        ))
-    } else {
-        state.camera()
-    };
+    // Each new output gets its own camera centered on its viewport
+    let logical_size = output_mode.size.to_logical(1);
+    let camera = smithay::utils::Point::from((
+        -(logical_size.w as f64) / 2.0,
+        -(logical_size.h as f64) / 2.0,
+    ));
 
-    init_output_state(&output, camera, state.config.friction);
+    init_output_state(&output, camera, state.config.friction, layout_position);
+
+    // Set focused_output to the first output created
+    if state.focused_output.is_none() {
+        state.focused_output = Some(output.clone());
+    }
 
     state
         .space
@@ -707,15 +717,21 @@ fn render_frame(
     log_err("dispatch_clients", data.display.dispatch_clients(&mut data.state));
     log_err("flush_clients", data.display.flush_clients());
 
+    // Read per-output state for this frame
+    let (cur_camera, cur_zoom, last_cam, last_zoom) = {
+        let os = crate::state::output_state(output);
+        (os.camera, os.zoom, os.last_rendered_camera, os.last_rendered_zoom)
+    };
+
     // Update background element
-    crate::render::update_background_element(&mut data.state, output);
+    crate::render::update_background_element(&mut data.state, output, cur_camera, cur_zoom, last_cam, last_zoom);
 
     // Take renderer out to split borrow from state
     let mut backend = data.state.backend.take().unwrap();
     let renderer = backend.renderer();
 
     // Build cursor + compose frame
-    let cursor_elements = crate::render::build_cursor_elements(&mut data.state, renderer);
+    let cursor_elements = crate::render::build_cursor_elements(&mut data.state, renderer, cur_camera, cur_zoom);
     let renderer = backend.renderer();
     let elements = crate::render::compose_frame(&mut data.state, renderer, output, cursor_elements);
 
@@ -747,8 +763,11 @@ fn render_frame(
     data.state.backend = Some(backend);
 
     // Record camera+zoom for next-frame change detection
-    data.state.set_last_rendered_camera(data.state.camera());
-    data.state.set_last_rendered_zoom(data.state.zoom());
+    {
+        let mut os = crate::state::output_state(output);
+        os.last_rendered_camera = os.camera;
+        os.last_rendered_zoom = os.zoom;
+    }
     data.state.write_state_file_if_dirty();
 
     // Post-render

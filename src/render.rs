@@ -92,6 +92,8 @@ pub fn build_tile_background_elements(
     state: &crate::state::DriftWm,
     renderer: &mut GlesRenderer,
     output: &Output,
+    camera: Point<f64, smithay::utils::Logical>,
+    zoom: f64,
 ) -> Vec<OutputRenderElements> {
     let scale = output.current_scale().integer_scale();
     let output_size = output
@@ -108,9 +110,8 @@ pub fn build_tile_background_elements(
         return vec![];
     }
 
-    let cam_x = state.camera().x;
-    let cam_y = state.camera().y;
-    let zoom = state.zoom();
+    let cam_x = camera.x;
+    let cam_y = camera.y;
 
     // Visible canvas area: viewport / zoom
     let visible_w = output_size.w as f64 / zoom;
@@ -161,15 +162,17 @@ pub fn build_canvas_layer_elements(
     state: &crate::state::DriftWm,
     renderer: &mut GlesRenderer,
     output: &Output,
+    camera: Point<f64, smithay::utils::Logical>,
+    zoom: f64,
 ) -> Vec<OutputRenderElements> {
     let output_scale = output.current_scale().fractional_scale();
-    let camera = state.camera().to_i32_round();
+    let camera_i32 = camera.to_i32_round();
     let mut elements = Vec::new();
 
     for cl in &state.canvas_layers {
         let Some(pos) = cl.position else { continue; };
         // Camera-relative position (same as render_elements_for_region does for windows)
-        let rel = pos - camera;
+        let rel = pos - camera_i32;
         let physical_loc = rel.to_physical_precise_round(output_scale);
 
         let surface_elements = cl
@@ -184,7 +187,7 @@ pub fn build_canvas_layer_elements(
             OutputRenderElements::Window(RescaleRenderElement::from_element(
                 elem,
                 Point::<i32, Physical>::from((0, 0)),
-                state.zoom(),
+                zoom,
             ))
         }));
     }
@@ -233,14 +236,17 @@ pub fn cursor_icon_name(status: &CursorImageStatus) -> Option<&'static str> {
 }
 
 /// Build the cursor render element(s) for the current frame.
+/// `camera` and `zoom` are from the output being rendered.
 pub fn build_cursor_elements(
     state: &mut crate::state::DriftWm,
     renderer: &mut GlesRenderer,
+    camera: Point<f64, smithay::utils::Logical>,
+    zoom: f64,
 ) -> Vec<MemoryRenderBufferRenderElement<GlesRenderer>> {
     let pointer = state.seat.get_pointer().unwrap();
     let canvas_pos = pointer.current_location();
     // Custom elements are in screen-local physical coords
-    let screen_pos = canvas_to_screen(CanvasPos(canvas_pos), state.camera(), state.zoom()).0;
+    let screen_pos = canvas_to_screen(CanvasPos(canvas_pos), camera, zoom).0;
     let physical_pos: Point<f64, Physical> = (screen_pos.x, screen_pos.y).into();
 
     // Extract cursor name before borrowing state mutably for load_xcursor
@@ -297,11 +303,13 @@ pub fn build_cursor_elements(
 pub fn update_background_element(
     state: &mut crate::state::DriftWm,
     output: &Output,
+    cur_camera: Point<f64, smithay::utils::Logical>,
+    cur_zoom: f64,
+    last_rendered_camera: Point<f64, smithay::utils::Logical>,
+    last_rendered_zoom: f64,
 ) -> (bool, bool) {
-    let cur_camera = state.camera();
-    let cur_zoom = state.zoom();
-    let camera_moved = cur_camera != state.last_rendered_camera();
-    let zoom_changed = cur_zoom != state.last_rendered_zoom();
+    let camera_moved = cur_camera != last_rendered_camera;
+    let zoom_changed = cur_zoom != last_rendered_zoom;
     if let Some(ref mut elem) = state.cached_bg_element {
         let scale = output.current_scale().integer_scale();
         let output_size = output
@@ -373,13 +381,18 @@ pub fn compose_frame(
         init_background(state, renderer, output_size);
     }
 
+    // Read per-output state directly — not via active_output() which follows the pointer
+    let (camera, zoom) = {
+        let os = crate::state::output_state(output);
+        (os.camera, os.zoom)
+    };
+
     let viewport_size = output
         .current_mode()
         .map(|m| m.size.to_logical(1))
         .unwrap_or((1, 1).into());
-    let zoom = state.zoom();
     let visible_rect = canvas::visible_canvas_rect(
-        state.camera().to_i32_round(),
+        camera.to_i32_round(),
         viewport_size,
         zoom,
     );
@@ -550,7 +563,7 @@ pub fn compose_frame(
         }
     }
 
-    let canvas_layer_elements = build_canvas_layer_elements(state, renderer, output);
+    let canvas_layer_elements = build_canvas_layer_elements(state, renderer, output, camera, zoom);
 
     let bg_elements: Vec<OutputRenderElements> =
         if let Some(ref elem) = state.cached_bg_element {
@@ -562,7 +575,7 @@ pub fn compose_frame(
                 ),
             )]
         } else if state.background_tile.is_some() {
-            build_tile_background_elements(state, renderer, output)
+            build_tile_background_elements(state, renderer, output, camera, zoom)
         } else {
             vec![]
         };
