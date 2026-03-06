@@ -405,12 +405,13 @@ impl OutputManagementHandler for DriftWm {
             let new_transform = cfg.transform.or_else(|| Some(output.current_transform()));
             let new_scale = cfg.scale.map(smithay::output::Scale::Fractional);
 
-            output.change_current_state(current_mode, new_transform, new_scale, None);
-
-            if let Some((x, y)) = cfg.position {
+            let new_position = cfg.position.map(|(x, y)| {
                 let mut os = crate::state::output_state(&output);
                 os.layout_position = (x, y).into();
-            }
+                os.layout_position
+            });
+
+            output.change_current_state(current_mode, new_transform, new_scale, new_position);
 
             self.cached_bg_elements.remove(&cfg.output_name);
         }

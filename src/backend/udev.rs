@@ -739,7 +739,7 @@ fn create_surface(
             (auto_x, 0).into()
         }
     };
-    output.change_current_state(Some(output_mode), Some(transform), Some(scale), None);
+    output.change_current_state(Some(output_mode), Some(transform), Some(scale), Some(layout_position));
     output.set_preferred(output_mode);
     output.create_global::<DriftWm>(dh);
 

@@ -814,8 +814,8 @@ fn render_to_offscreen(
     let _sync_point = {
         let mut target = renderer.bind(&mut texture)?;
 
-        let inverted_transform = transform.invert();
-        let output_rect = Rectangle::from_size(inverted_transform.transform_size(size));
+        let transform = transform.invert();
+        let output_rect = Rectangle::from_size(transform.transform_size(size));
 
         let mut frame = renderer.render(&mut target, size, transform)?;
 
