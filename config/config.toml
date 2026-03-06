@@ -111,13 +111,13 @@ decoration = "none"
 
 [[window_rules]]
 app_id = "drift-power"
-position = [275, -259]
+position = [274, -259]
 widget = true
 no_focus = false
 decoration = "none"
 
 [[window_rules]]
 app_id = "drift-power-menu"
-position = [275, -370]
+position = [274, -370]
 widget = true
 no_focus = false

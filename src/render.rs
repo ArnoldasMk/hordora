@@ -824,7 +824,7 @@ pub fn render_screencopy(
     output: &Output,
     elements: &[OutputRenderElements],
 ) {
-    use smithay::backend::renderer::ExportMem;
+    use smithay::backend::renderer::{ExportMem, Renderer};
     use smithay::wayland::shm;
     use driftwm::protocols::screencopy::ScreencopyBuffer;
     use std::ptr;
@@ -860,40 +860,55 @@ pub fn render_screencopy(
                 .collect()
         };
 
-        let result = render_to_offscreen(renderer, size, scale, transform, &use_elements);
-
-        match result {
-            Ok(mapping) => {
-                let ScreencopyBuffer::Shm(wl_buffer) = screencopy.buffer();
-                let copy_ok =
-                    shm::with_buffer_contents_mut(wl_buffer, |shm_buf, shm_len, _data| {
-                        let bytes = match renderer.map_texture(&mapping) {
-                            Ok(b) => b,
-                            Err(e) => {
-                                tracing::warn!("screencopy: map_texture failed: {e:?}");
-                                return false;
-                            }
-                        };
-                        let copy_len = shm_len.min(bytes.len());
-                        unsafe {
-                            ptr::copy_nonoverlapping(bytes.as_ptr(), shm_buf.cast(), copy_len);
+        match screencopy.buffer() {
+            ScreencopyBuffer::Dmabuf(dmabuf) => {
+                let mut dmabuf = dmabuf.clone();
+                match render_to_dmabuf(renderer, &mut dmabuf, size, scale, transform, &use_elements) {
+                    Ok(sync) => {
+                        if let Err(e) = renderer.wait(&sync) {
+                            tracing::warn!("screencopy: dmabuf sync wait failed: {e:?}");
+                            continue; // screencopy Drop sends failed()
                         }
-                        true
-                    });
-
-                match copy_ok {
-                    Ok(true) => {
                         screencopy.submit(false, timestamp);
                     }
-                    _ => {
-                        tracing::warn!("screencopy: SHM buffer copy failed");
-                        // screencopy drops here → sends failed()
+                    Err(e) => {
+                        tracing::warn!("screencopy: dmabuf render failed: {e:?}");
                     }
                 }
             }
-            Err(e) => {
-                tracing::warn!("screencopy: offscreen render failed: {e:?}");
-                // screencopy drops here → sends failed()
+            ScreencopyBuffer::Shm(wl_buffer) => {
+                let result = render_to_offscreen(renderer, size, scale, transform, &use_elements);
+                match result {
+                    Ok(mapping) => {
+                        let copy_ok =
+                            shm::with_buffer_contents_mut(wl_buffer, |shm_buf, shm_len, _data| {
+                                let bytes = match renderer.map_texture(&mapping) {
+                                    Ok(b) => b,
+                                    Err(e) => {
+                                        tracing::warn!("screencopy: map_texture failed: {e:?}");
+                                        return false;
+                                    }
+                                };
+                                let copy_len = shm_len.min(bytes.len());
+                                unsafe {
+                                    ptr::copy_nonoverlapping(bytes.as_ptr(), shm_buf.cast(), copy_len);
+                                }
+                                true
+                            });
+
+                        match copy_ok {
+                            Ok(true) => {
+                                screencopy.submit(false, timestamp);
+                            }
+                            _ => {
+                                tracing::warn!("screencopy: SHM buffer copy failed");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("screencopy: offscreen render failed: {e:?}");
+                    }
+                }
             }
         }
     }
@@ -934,6 +949,37 @@ fn render_to_offscreen(
     Ok(mapping)
 }
 
+/// Render elements directly into a client-provided DMA-BUF (zero CPU copies).
+///
+/// The caller must choose the correct `transform` for the protocol:
+/// - wlr-screencopy: `output.current_transform()` (buffer is raw mode size)
+/// - ext-image-copy-capture: `Transform::Normal` (buffer is already transformed)
+fn render_to_dmabuf(
+    renderer: &mut GlesRenderer,
+    dmabuf: &mut smithay::backend::allocator::dmabuf::Dmabuf,
+    size: Size<i32, Physical>,
+    scale: Scale<f64>,
+    transform: Transform,
+    elements: &[&OutputRenderElements],
+) -> Result<smithay::backend::renderer::sync::SyncPoint, Box<dyn std::error::Error>> {
+    use smithay::backend::renderer::Bind;
+    use smithay::backend::renderer::damage::OutputDamageTracker;
+
+    let sync = {
+        let mut target = renderer.bind(dmabuf)?;
+        let mut damage_tracker = OutputDamageTracker::new(size, scale, transform);
+        damage_tracker.render_output(
+            renderer,
+            &mut target,
+            0,
+            elements,
+            [0.0f32, 0.0, 0.0, 1.0],
+        )?.sync
+    };
+
+    Ok(sync)
+}
+
 /// Fulfill pending ext-image-copy-capture frames by rendering to offscreen textures.
 pub fn render_capture_frames(
     state: &mut crate::state::DriftWm,
@@ -941,7 +987,7 @@ pub fn render_capture_frames(
     output: &Output,
     elements: &[OutputRenderElements],
 ) {
-    use smithay::backend::renderer::ExportMem;
+    use smithay::backend::renderer::{ExportMem, Renderer};
     use smithay::wayland::shm;
     use std::ptr;
 
@@ -969,6 +1015,8 @@ pub fn render_capture_frames(
     let scale = Scale::from(output_scale);
     let timestamp = state.start_time.elapsed();
 
+    let fail_reason = smithay::reexports::wayland_protocols::ext::image_copy_capture::v1::server::ext_image_copy_capture_frame_v1::FailureReason::Unknown;
+
     for capture in pending {
         let use_elements: Vec<&OutputRenderElements> = if capture.paint_cursors {
             elements.iter().collect()
@@ -981,11 +1029,28 @@ pub fn render_capture_frames(
 
         // ext-image-copy-capture buffer_size is already in transformed/logical orientation,
         // matching the element coordinate space — render with Normal (no additional transform).
-        let result = render_to_offscreen(renderer, capture.buffer_size, scale, Transform::Normal, &use_elements);
 
-        match result {
-            Ok(mapping) => {
-                let copy_ok =
+        // Try DMA-BUF first, fall back to SHM
+        let ok = if let Ok(dmabuf) = smithay::wayland::dmabuf::get_dmabuf(&capture.buffer) {
+            let mut dmabuf = dmabuf.clone();
+            match render_to_dmabuf(renderer, &mut dmabuf, capture.buffer_size, scale, Transform::Normal, &use_elements) {
+                Ok(sync) => {
+                    if let Err(e) = renderer.wait(&sync) {
+                        tracing::warn!("capture: dmabuf sync wait failed: {e:?}");
+                        false
+                    } else {
+                        true
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("capture: dmabuf render failed: {e:?}");
+                    false
+                }
+            }
+        } else {
+            let result = render_to_offscreen(renderer, capture.buffer_size, scale, Transform::Normal, &use_elements);
+            match result {
+                Ok(mapping) => {
                     shm::with_buffer_contents_mut(&capture.buffer, |shm_buf, shm_len, _data| {
                         let bytes = match renderer.map_texture(&mapping) {
                             Ok(b) => b,
@@ -999,41 +1064,34 @@ pub fn render_capture_frames(
                             ptr::copy_nonoverlapping(bytes.as_ptr(), shm_buf.cast(), copy_len);
                         }
                         true
-                    });
-
-                match copy_ok {
-                    Ok(true) => {
-                        let w = capture.buffer_size.w;
-                        let h = capture.buffer_size.h;
-                        capture.frame.transform(smithay::utils::Transform::Normal.into());
-                        capture.frame.damage(0, 0, w, h);
-                        let tv_sec_hi = (timestamp.as_secs() >> 32) as u32;
-                        let tv_sec_lo = (timestamp.as_secs() & 0xFFFFFFFF) as u32;
-                        let tv_nsec = timestamp.subsec_nanos();
-                        capture.frame.presentation_time(tv_sec_hi, tv_sec_lo, tv_nsec);
-                        capture.frame.ready();
-
-                        // Find the session for this frame and mark it done
-                        let frame_data = capture.frame.data::<std::sync::Mutex<driftwm::protocols::image_copy_capture::CaptureFrameData>>();
-                        if let Some(fd) = frame_data {
-                            let fd = fd.lock().unwrap();
-                            state.image_copy_capture_state.frame_done(&fd.session);
-                        }
-                    }
-                    _ => {
-                        tracing::warn!("capture: SHM buffer copy failed");
-                        capture.frame.failed(
-                            smithay::reexports::wayland_protocols::ext::image_copy_capture::v1::server::ext_image_copy_capture_frame_v1::FailureReason::Unknown,
-                        );
-                    }
+                    })
+                    .unwrap_or(false)
+                }
+                Err(e) => {
+                    tracing::warn!("capture: offscreen render failed: {e:?}");
+                    false
                 }
             }
-            Err(e) => {
-                tracing::warn!("capture: offscreen render failed: {e:?}");
-                capture.frame.failed(
-                    smithay::reexports::wayland_protocols::ext::image_copy_capture::v1::server::ext_image_copy_capture_frame_v1::FailureReason::Unknown,
-                );
+        };
+
+        if ok {
+            let w = capture.buffer_size.w;
+            let h = capture.buffer_size.h;
+            capture.frame.transform(smithay::utils::Transform::Normal.into());
+            capture.frame.damage(0, 0, w, h);
+            let tv_sec_hi = (timestamp.as_secs() >> 32) as u32;
+            let tv_sec_lo = (timestamp.as_secs() & 0xFFFFFFFF) as u32;
+            let tv_nsec = timestamp.subsec_nanos();
+            capture.frame.presentation_time(tv_sec_hi, tv_sec_lo, tv_nsec);
+            capture.frame.ready();
+
+            let frame_data = capture.frame.data::<std::sync::Mutex<driftwm::protocols::image_copy_capture::CaptureFrameData>>();
+            if let Some(fd) = frame_data {
+                let fd = fd.lock().unwrap();
+                state.image_copy_capture_state.frame_done(&fd.session);
             }
+        } else {
+            capture.frame.failed(fail_reason);
         }
     }
 }

@@ -475,6 +475,12 @@ pub fn init_udev(
                                     // Stop capture sessions for this output
                                     data.state.image_copy_capture_state.remove_output(&surface.output);
 
+                                    // Close layer surfaces on this output so clients
+                                    // (swayosd, waybar, etc.) can recreate on remaining outputs
+                                    for layer in smithay::desktop::layer_map_for_output(&surface.output).layers() {
+                                        layer.layer_surface().send_close();
+                                    }
+
                                     if surfaces.is_empty() {
                                         // Last output disconnected — keep it in the Space as
                                         // a virtual placeholder so active_output() always

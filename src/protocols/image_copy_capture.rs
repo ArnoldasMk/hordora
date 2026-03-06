@@ -211,6 +211,10 @@ where
                 // Send buffer constraints
                 session_obj.buffer_size(buffer_size.w as u32, buffer_size.h as u32);
                 session_obj.shm_format(Format::Xrgb8888);
+                // TODO: advertise DMA-BUF format + device via dmabuf_device(dev_t)
+                // + dmabuf_format(fourcc, modifiers). Requires plumbing DRM render node
+                // device info from the backend. portal-wlr uses wlr-screencopy (not
+                // ext-image-copy-capture), so this doesn't block OBS.
                 session_obj.done();
 
                 let cap_state = state.image_copy_capture_state();
