@@ -472,6 +472,9 @@ pub fn init_udev(
                                         &surface.output,
                                     );
 
+                                    // Stop capture sessions for this output
+                                    data.state.image_copy_capture_state.remove_output(&surface.output);
+
                                     if surfaces.is_empty() {
                                         // Last output disconnected — keep it in the Space as
                                         // a virtual placeholder so active_output() always
@@ -879,6 +882,10 @@ fn render_frame(
     // Fulfill pending screencopy requests
     let renderer = backend.renderer();
     crate::render::render_screencopy(&mut data.state, renderer, output, &elements);
+
+    // Fulfill pending ext-image-copy-capture frames
+    let renderer = backend.renderer();
+    crate::render::render_capture_frames(&mut data.state, renderer, output, &elements);
 
     // Render via DRM compositor
     let renderer = backend.renderer();

@@ -297,6 +297,10 @@ pub struct DriftWm {
     pub screencopy_state: driftwm::protocols::screencopy::ScreencopyManagerState,
     pub output_management_state: driftwm::protocols::output_management::OutputManagementState,
     pub pending_screencopies: Vec<driftwm::protocols::screencopy::Screencopy>,
+    #[allow(dead_code)]
+    pub image_capture_source_state: driftwm::protocols::image_capture_source::ImageCaptureSourceState,
+    pub image_copy_capture_state: driftwm::protocols::image_copy_capture::ImageCopyCaptureState,
+    pub pending_captures: Vec<driftwm::protocols::image_copy_capture::PendingCapture>,
     pub session_lock_manager_state: SessionLockManagerState,
     pub session_lock: SessionLock,
     // -- per-output: lock surface (one per output in multi-monitor) --
@@ -414,6 +418,10 @@ impl DriftWm {
             driftwm::protocols::foreign_toplevel::ForeignToplevelManagerState::new::<Self, _>(&dh, |_| true);
         let screencopy_state =
             driftwm::protocols::screencopy::ScreencopyManagerState::new::<Self, _>(&dh, |_| true);
+        let image_capture_source_state =
+            driftwm::protocols::image_capture_source::ImageCaptureSourceState::new::<Self, _>(&dh, |_| true);
+        let image_copy_capture_state =
+            driftwm::protocols::image_copy_capture::ImageCopyCaptureState::new::<Self, _>(&dh, |_| true);
         let output_management_state =
             driftwm::protocols::output_management::OutputManagementState::new::<Self, _>(&dh, |_| true);
         let session_lock_manager_state = SessionLockManagerState::new::<Self, _>(&dh, |_| true);
@@ -477,6 +485,9 @@ impl DriftWm {
             screencopy_state,
             output_management_state,
             pending_screencopies: Vec::new(),
+            image_capture_source_state,
+            image_copy_capture_state,
+            pending_captures: Vec::new(),
             session_lock_manager_state,
             session_lock: SessionLock::Unlocked,
             lock_surfaces: HashMap::new(),

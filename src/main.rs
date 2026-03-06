@@ -26,11 +26,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    // Parse --backend arg
+    // Parse --backend arg (default: udev on bare metal, winit if nested)
     let backend_name = std::env::args()
         .skip_while(|a| a != "--backend")
         .nth(1)
-        .unwrap_or_else(|| "winit".to_string());
+        .unwrap_or_else(|| {
+            if std::env::var_os("WAYLAND_DISPLAY").is_some() || std::env::var_os("DISPLAY").is_some() {
+                "winit".to_string()
+            } else {
+                "udev".to_string()
+            }
+        });
 
     // Create calloop event loop
     let mut event_loop: smithay::reexports::calloop::EventLoop<CalloopData> =
@@ -92,11 +98,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe { std::env::set_var("SDL_VIDEODRIVER", "wayland") };
     unsafe { std::env::set_var("GDK_BACKEND", "wayland,x11") };
     unsafe { std::env::set_var("ELECTRON_OZONE_PLATFORM_HINT", "wayland") };
+    unsafe { std::env::set_var("XDG_SESSION_CLASS", "user") };
+    unsafe { std::env::set_var("XDG_SESSION_DESKTOP", "driftwm") };
 
     // Propagate session env to D-Bus and systemd so D-Bus-activated apps
     // (GNOME Text Editor, Loupe, etc.) can find our Wayland socket.
     if let Err(e) = std::process::Command::new("dbus-update-activation-environment")
-        .args(["--systemd", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE"])
+        .args(["--systemd", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "XDG_SESSION_CLASS", "XDG_SESSION_DESKTOP"])
         .spawn()
     {
         tracing::warn!("Failed to update D-Bus activation environment: {e}");

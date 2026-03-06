@@ -1,6 +1,6 @@
 use smithay::{
     input::pointer::MotionEvent,
-    utils::{Point, SERIAL_COUNTER},
+    utils::{Point, Size, SERIAL_COUNTER},
 };
 
 use driftwm::canvas::{self};
@@ -336,16 +336,18 @@ impl DriftWm {
                 } else {
                     // Compute bounding box of all windows
                     let viewport = self.get_viewport_size();
-                    let bbox = canvas::all_windows_bbox(
-                        self.space.elements().filter(|w| {
-                            !driftwm::config::applied_rule(w.toplevel().unwrap().wl_surface())
-                                .is_some_and(|r| r.widget || r.no_focus)
-                        }).map(|w| {
-                            let loc = self.space.element_location(w).unwrap_or_default();
-                            let size = w.geometry().size;
-                            (loc, size)
-                        }),
-                    );
+                    let windows = self.space.elements().filter(|w| {
+                        !driftwm::config::applied_rule(w.toplevel().unwrap().wl_surface())
+                            .is_some_and(|r| r.widget || r.no_focus)
+                    }).map(|w| {
+                        let loc = self.space.element_location(w).unwrap_or_default();
+                        let size = w.geometry().size;
+                        (loc, size)
+                    });
+                    let anchors = self.config.nav_anchors.iter().map(|p| {
+                        (Point::from((p.x as i32, p.y as i32)), Size::from((0, 0)))
+                    });
+                    let bbox = canvas::all_windows_bbox(windows.chain(anchors));
                     if let Some(bbox) = bbox {
                         let fit_zoom = canvas::zoom_to_fit(
                             bbox, viewport, self.config.zoom_fit_padding,

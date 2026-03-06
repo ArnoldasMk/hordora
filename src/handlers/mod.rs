@@ -381,6 +381,22 @@ impl ScreencopyHandler for DriftWm {
 
 driftwm::delegate_screencopy!(DriftWm);
 
+driftwm::delegate_image_capture_source!(DriftWm);
+
+use driftwm::protocols::image_copy_capture::{ImageCopyCaptureHandler, ImageCopyCaptureState, PendingCapture};
+
+impl ImageCopyCaptureHandler for DriftWm {
+    fn image_copy_capture_state(&mut self) -> &mut ImageCopyCaptureState {
+        &mut self.image_copy_capture_state
+    }
+
+    fn capture_frame(&mut self, capture: PendingCapture) {
+        self.pending_captures.push(capture);
+    }
+}
+
+driftwm::delegate_image_copy_capture!(DriftWm);
+
 use driftwm::protocols::output_management::{
     OutputManagementHandler, OutputManagementState, RequestedHeadConfig,
 };

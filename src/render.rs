@@ -841,6 +841,109 @@ fn render_to_offscreen(
     Ok(mapping)
 }
 
+/// Fulfill pending ext-image-copy-capture frames by rendering to offscreen textures.
+pub fn render_capture_frames(
+    state: &mut crate::state::DriftWm,
+    renderer: &mut GlesRenderer,
+    output: &Output,
+    elements: &[OutputRenderElements],
+) {
+    use smithay::backend::renderer::ExportMem;
+    use smithay::wayland::shm;
+    use std::ptr;
+
+    // Promote any sessions waiting for damage on this output
+    state
+        .image_copy_capture_state
+        .promote_waiting_frames(output, &mut state.pending_captures);
+
+    // Extract captures for this output
+    let mut pending = Vec::new();
+    let mut i = 0;
+    while i < state.pending_captures.len() {
+        if &state.pending_captures[i].output == output {
+            pending.push(state.pending_captures.swap_remove(i));
+        } else {
+            i += 1;
+        }
+    }
+
+    if pending.is_empty() {
+        return;
+    }
+
+    let output_scale = output.current_scale().fractional_scale();
+    let scale = Scale::from(output_scale);
+    let transform = output.current_transform();
+    let timestamp = state.start_time.elapsed();
+
+    for capture in pending {
+        let use_elements: Vec<&OutputRenderElements> = if capture.paint_cursors {
+            elements.iter().collect()
+        } else {
+            elements
+                .iter()
+                .filter(|e| !matches!(e, OutputRenderElements::Cursor(_)))
+                .collect()
+        };
+
+        let result = render_to_offscreen(renderer, capture.buffer_size, scale, transform, &use_elements);
+
+        match result {
+            Ok(mapping) => {
+                let copy_ok =
+                    shm::with_buffer_contents_mut(&capture.buffer, |shm_buf, shm_len, _data| {
+                        let bytes = match renderer.map_texture(&mapping) {
+                            Ok(b) => b,
+                            Err(e) => {
+                                tracing::warn!("capture: map_texture failed: {e:?}");
+                                return false;
+                            }
+                        };
+                        let copy_len = shm_len.min(bytes.len());
+                        unsafe {
+                            ptr::copy_nonoverlapping(bytes.as_ptr(), shm_buf.cast(), copy_len);
+                        }
+                        true
+                    });
+
+                match copy_ok {
+                    Ok(true) => {
+                        let w = capture.buffer_size.w;
+                        let h = capture.buffer_size.h;
+                        capture.frame.transform(smithay::utils::Transform::Normal.into());
+                        capture.frame.damage(0, 0, w, h);
+                        let tv_sec_hi = (timestamp.as_secs() >> 32) as u32;
+                        let tv_sec_lo = (timestamp.as_secs() & 0xFFFFFFFF) as u32;
+                        let tv_nsec = timestamp.subsec_nanos();
+                        capture.frame.presentation_time(tv_sec_hi, tv_sec_lo, tv_nsec);
+                        capture.frame.ready();
+
+                        // Find the session for this frame and mark it done
+                        let frame_data = capture.frame.data::<std::sync::Mutex<driftwm::protocols::image_copy_capture::CaptureFrameData>>();
+                        if let Some(fd) = frame_data {
+                            let fd = fd.lock().unwrap();
+                            state.image_copy_capture_state.frame_done(&fd.session);
+                        }
+                    }
+                    _ => {
+                        tracing::warn!("capture: SHM buffer copy failed");
+                        capture.frame.failed(
+                            smithay::reexports::wayland_protocols::ext::image_copy_capture::v1::server::ext_image_copy_capture_frame_v1::FailureReason::Unknown,
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("capture: offscreen render failed: {e:?}");
+                capture.frame.failed(
+                    smithay::reexports::wayland_protocols::ext::image_copy_capture::v1::server::ext_image_copy_capture_frame_v1::FailureReason::Unknown,
+                );
+            }
+        }
+    }
+}
+
 /// Sync foreign-toplevel protocol state with the current window list.
 /// Call once per frame iteration (not per-output).
 pub fn refresh_foreign_toplevels(state: &mut crate::state::DriftWm) {

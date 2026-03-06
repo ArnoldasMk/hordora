@@ -317,6 +317,7 @@ impl DriftWm {
         // The target rect for constraining, in parent-surface-relative coordinates.
         // We need to figure out where the root surface is on the output and express
         // the output bounds relative to the popup's toplevel.
+        let active_output = self.active_output();
         let target = if let Some(window) = self
             .space
             .elements()
@@ -324,10 +325,7 @@ impl DriftWm {
         {
             // Parent is an xdg window — target is the output rect in window-relative coords
             let window_loc = self.space.element_location(window).unwrap_or_default();
-            let output_geo = self
-                .space
-                .outputs()
-                .next()
+            let output_geo = active_output.as_ref()
                 .and_then(|o| self.space.output_geometry(o))
                 .unwrap_or_default();
 
@@ -344,10 +342,7 @@ impl DriftWm {
             && let Some(pos) = cl.position
         {
             // Parent is a canvas-positioned layer surface
-            let output_geo = self
-                .space
-                .outputs()
-                .next()
+            let output_geo = active_output.as_ref()
                 .and_then(|o| self.space.output_geometry(o))
                 .unwrap_or_default();
             // Constrain to the visible canvas area (accounts for zoom)
