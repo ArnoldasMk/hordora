@@ -101,13 +101,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe { std::env::set_var("XDG_SESSION_CLASS", "user") };
     unsafe { std::env::set_var("XDG_SESSION_DESKTOP", "driftwm") };
 
-    // Propagate session env to D-Bus and systemd so D-Bus-activated apps
-    // (GNOME Text Editor, Loupe, etc.) can find our Wayland socket.
-    if let Err(e) = std::process::Command::new("dbus-update-activation-environment")
-        .args(["--systemd", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "XDG_SESSION_CLASS", "XDG_SESSION_DESKTOP"])
+    // Import all environment (including PAM-set vars like SSH_AUTH_SOCK)
+    // into systemd and D-Bus so child processes and D-Bus-activated apps
+    // can find our Wayland socket, keyring, etc.
+    match std::process::Command::new("/bin/sh")
+        .args(["-c", "systemctl --user import-environment; hash dbus-update-activation-environment 2>/dev/null && dbus-update-activation-environment --all"])
         .spawn()
     {
-        tracing::warn!("Failed to update D-Bus activation environment: {e}");
+        Ok(mut child) => {
+            if let Err(e) = child.wait() {
+                tracing::warn!("Error waiting for environment import: {e}");
+            }
+        }
+        Err(e) => tracing::warn!("Failed to import environment: {e}"),
     }
 
     event_loop
