@@ -843,6 +843,17 @@ fn create_surface(
     // Set focused_output to the first output created
     if state.focused_output.is_none() {
         state.focused_output = Some(output.clone());
+        // Center pointer on first output
+        let size = crate::state::output_logical_size(&output);
+        let (cam, zoom) = {
+            let os = crate::state::output_state(&output);
+            (os.camera, os.zoom)
+        };
+        let center = smithay::utils::Point::from((
+            cam.x + size.w as f64 / (2.0 * zoom),
+            cam.y + size.h as f64 / (2.0 * zoom),
+        ));
+        state.warp_pointer(center);
     }
 
     // Use potentially-restored camera for output mapping
