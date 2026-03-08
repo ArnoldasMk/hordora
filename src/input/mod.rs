@@ -30,6 +30,11 @@ impl DriftWm {
     pub fn process_input_event<I: InputBackend>(&mut self, event: InputEvent<I>) {
         self.mark_all_dirty();
 
+        // Notify idle tracker of user activity (skip device add/remove metadata events)
+        if !matches!(&event, InputEvent::DeviceAdded { .. } | InputEvent::DeviceRemoved { .. }) {
+            self.idle_notifier_state.notify_activity(&self.seat);
+        }
+
         // When locked, forward keyboard (VT switch + lock surface input) and
         // pointer events directly to smithay — no compositor grabs or gestures.
         if !matches!(self.session_lock, crate::state::SessionLock::Unlocked) {

@@ -82,8 +82,8 @@ impl DriftWm {
                 let timer = Timer::from_duration(Duration::from_millis(
                     super::gestures::DOUBLE_TAP_WINDOW_MS,
                 ));
-                if let Ok(token) = self.loop_handle.insert_source(timer, |_, _, data| {
-                    data.state.flush_pending_middle_click();
+                if let Ok(token) = self.loop_handle.insert_source(timer, |_, _, data: &mut DriftWm| {
+                    data.flush_pending_middle_click();
                     TimeoutAction::Drop
                 }) {
                     self.pending_middle_click = Some(PendingMiddleClick {

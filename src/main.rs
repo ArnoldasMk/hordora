@@ -7,7 +7,7 @@ mod input;
 mod render;
 mod state;
 
-use state::{CalloopData, ClientState, log_err};
+use state::{ClientState, DriftWm};
 use std::sync::Arc;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,24 +39,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
     // Create calloop event loop
-    let mut event_loop: smithay::reexports::calloop::EventLoop<CalloopData> =
+    let mut event_loop: smithay::reexports::calloop::EventLoop<DriftWm> =
         smithay::reexports::calloop::EventLoop::try_new()?;
 
     // Create Wayland display
     let display =
-        smithay::reexports::wayland_server::Display::<state::DriftWm>::new()?;
+        smithay::reexports::wayland_server::Display::<DriftWm>::new()?;
 
     // Build compositor state
-    let compositor_state = state::DriftWm::new(
+    let mut data = DriftWm::new(
         display.handle(),
         event_loop.handle(),
         event_loop.get_signal(),
     );
-
-    let mut data = CalloopData {
-        state: compositor_state,
-        display,
-    };
 
     // Initialize backend BEFORE setting WAYLAND_DISPLAY.
     let drm_device = match backend_name.as_str() {
@@ -67,19 +62,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    // Register the Wayland display FD so calloop wakes on client messages
-    let poll_fd = data.display.backend().poll_fd().try_clone_to_owned()?;
-    event_loop.handle().insert_source(
-        smithay::reexports::calloop::generic::Generic::new(
-            poll_fd,
-            smithay::reexports::calloop::Interest::READ,
-            smithay::reexports::calloop::Mode::Level,
-        ),
-        |_, _, data: &mut CalloopData| {
-            log_err("dispatch_clients", data.display.dispatch_clients(&mut data.state));
-            Ok(smithay::reexports::calloop::PostAction::Continue)
-        },
-    )?;
+    // Register the Wayland Display as a calloop source so client messages
+    // are dispatched automatically. This replaces the old poll_fd approach.
+    let display_source = smithay::reexports::calloop::generic::Generic::new(
+        display,
+        smithay::reexports::calloop::Interest::READ,
+        smithay::reexports::calloop::Mode::Level,
+    );
+    event_loop.handle().insert_source(display_source, |_, display, data: &mut DriftWm| {
+        // SAFETY: we never drop the Display while the Generic source is alive
+        unsafe { display.get_mut() }.dispatch_clients(data).ok();
+        Ok(smithay::reexports::calloop::PostAction::Continue)
+    })?;
 
     // Now create listening socket and advertise it to child processes
     let listening_socket =
@@ -127,37 +121,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     event_loop
         .handle()
-        .insert_source(listening_socket, |stream, _, data: &mut CalloopData| {
+        .insert_source(listening_socket, |stream, _, data: &mut DriftWm| {
             tracing::info!("New client connected");
-            log_err("insert_client", data
-                .display
-                .handle()
-                .insert_client(stream, Arc::new(ClientState::default())));
-
+            if let Err(e) = data
+                .display_handle
+                .insert_client(stream, Arc::new(ClientState::default()))
+            {
+                tracing::warn!("Failed to insert client: {e}");
+            }
         })?;
 
     // Config file watcher: poll mtime every 500ms
     {
         let config_path = driftwm::config::config_path();
-        data.state.config_file_mtime = std::fs::metadata(&config_path)
+        data.config_file_mtime = std::fs::metadata(&config_path)
             .and_then(|m| m.modified())
             .ok();
 
         let timer = smithay::reexports::calloop::timer::Timer::from_duration(
             std::time::Duration::from_millis(500),
         );
-        event_loop.handle().insert_source(timer, move |_, _, data: &mut CalloopData| {
+        event_loop.handle().insert_source(timer, move |_, _, data: &mut DriftWm| {
             let current_mtime = std::fs::metadata(&config_path)
                 .and_then(|m| m.modified())
                 .ok();
-            if current_mtime != data.state.config_file_mtime && current_mtime.is_some() {
+            if current_mtime != data.config_file_mtime && current_mtime.is_some() {
                 // Debounce: skip if mtime is <100ms old (editor may still be writing)
                 let dominated_by_recent_write = current_mtime.is_some_and(|mt| {
                     mt.elapsed().is_ok_and(|age| age.as_millis() < 100)
                 });
                 if !dominated_by_recent_write {
-                    data.state.config_file_mtime = current_mtime;
-                    data.state.reload_config();
+                    data.config_file_mtime = current_mtime;
+                    data.reload_config();
                 }
             }
             smithay::reexports::calloop::timer::TimeoutAction::ToDuration(
@@ -167,8 +162,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Spawn XWayland (after WAYLAND_DISPLAY is set so it can connect as a client)
-    if data.state.config.xwayland_enabled {
-        backend::spawn_xwayland(&data.display.handle(), &event_loop.handle());
+    if data.config.xwayland_enabled {
+        backend::spawn_xwayland(&data.display_handle, &event_loop.handle());
     }
 
     // Auto-reap child processes — prevents zombies from exec/autostart commands.
@@ -177,7 +172,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Defer autostart until the event loop is running — GTK apps (swaync) need
     // the compositor processing Wayland events before they connect.
-    let autostart = data.state.autostart.clone();
+    let autostart = data.autostart.clone();
     if !autostart.is_empty() {
         event_loop.handle().insert_source(
             smithay::reexports::calloop::timer::Timer::from_duration(
@@ -199,10 +194,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(ref device) = drm_device {
             backend::udev::render_if_needed(device, data);
         }
-        data.state.space.refresh();
-        data.state.popups.cleanup();
-        log_err("dispatch_clients", data.display.dispatch_clients(&mut data.state));
-        log_err("flush_clients", data.display.flush_clients());
+        data.space.refresh();
+        data.popups.cleanup();
+        data.display_handle.flush_clients().ok();
     })?;
 
     state::remove_state_file();

@@ -83,12 +83,12 @@ impl CompositorHandler for DriftWm {
         {
             let ok = self
                 .loop_handle
-                .insert_source(source, move |_, _, data| {
+                .insert_source(source, move |_, _, data: &mut DriftWm| {
                     if let Some(client_state) = client.get_data::<ClientState>() {
-                        let dh = data.display.handle();
+                        let dh = data.display_handle.clone();
                         client_state
                             .compositor_state
-                            .blocker_cleared(&mut data.state, &dh);
+                            .blocker_cleared(data, &dh);
                     }
                     Ok(())
                 })

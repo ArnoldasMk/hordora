@@ -36,7 +36,7 @@ use smithay_drm_extras::drm_scanner::{DrmScanEvent, DrmScanner};
 use driftwm::config::{OutputMode as ConfigOutputMode, OutputPosition};
 use crate::render::OutputRenderElements;
 use crate::backend::Backend;
-use crate::state::{CalloopData, DriftWm, init_output_state, log_err};
+use crate::state::{DriftWm, init_output_state};
 
 const SUPPORTED_COLOR_FORMATS: &[Fourcc] = &[
     Fourcc::Xrgb8888,
@@ -75,46 +75,46 @@ struct SurfaceData {
 pub(crate) struct UdevDevice(Rc<RefCell<DeviceData>>);
 
 /// Tick animations once for all outputs, mark dirty CRTCs, then render.
-pub(crate) fn render_if_needed(device: &UdevDevice, data: &mut CalloopData) {
+pub(crate) fn render_if_needed(device: &UdevDevice, data: &mut DriftWm) {
     // 1. Tick animations once for all outputs (before device borrow)
-    data.state.tick_all_animations();
+    data.tick_all_animations();
 
     let mut dev = device.0.borrow_mut();
 
     // 2. Mark CRTCs dirty for per-output animations
     for (&crtc, surface) in dev.surfaces.iter() {
-        if data.state.output_has_active_animations(&surface.output) {
-            data.state.redraws_needed.insert(crtc);
+        if data.output_has_active_animations(&surface.output) {
+            data.redraws_needed.insert(crtc);
         }
     }
 
     // 3. Global animations (key repeat, cursor) → mark all dirty
     // mark_all_dirty() uses active_crtcs on DriftWm, not dev.surfaces
-    if data.state.held_action.is_some()
-        || data.state.exec_cursor_show_at.is_some()
-        || data.state.exec_cursor_deadline.is_some()
-        || data.state.cursor_is_animated()
+    if data.held_action.is_some()
+        || data.exec_cursor_show_at.is_some()
+        || data.exec_cursor_deadline.is_some()
+        || data.cursor_is_animated()
     {
-        data.state.mark_all_dirty();
+        data.mark_all_dirty();
     }
 
     // 4. Foreign toplevel refresh (once per frame, not per-output)
-    crate::render::refresh_foreign_toplevels(&mut data.state);
+    crate::render::refresh_foreign_toplevels(data);
 
     // 4b. Re-notify output management clients after apply_output_config
-    if data.state.output_config_dirty {
-        data.state.output_config_dirty = false;
+    if data.output_config_dirty {
+        data.output_config_dirty = false;
         let head_state = collect_output_state_from_surfaces(&dev.surfaces, &dev.drm);
         driftwm::protocols::output_management::notify_changes::<DriftWm>(
-            &mut data.state.output_management_state,
+            &mut data.output_management_state,
             head_state,
         );
     }
 
     // 5. Render outputs that need it
     for (&crtc, surface) in dev.surfaces.iter_mut() {
-        if data.state.redraws_needed.contains(&crtc)
-            && !data.state.frames_pending.contains(&crtc)
+        if data.redraws_needed.contains(&crtc)
+            && !data.frames_pending.contains(&crtc)
         {
             render_frame(data, &mut surface.compositor, &surface.output, crtc);
         }
@@ -122,8 +122,8 @@ pub(crate) fn render_if_needed(device: &UdevDevice, data: &mut CalloopData) {
 }
 
 pub fn init_udev(
-    event_loop: &mut EventLoop<'static, CalloopData>,
-    data: &mut CalloopData,
+    event_loop: &mut EventLoop<'static, DriftWm>,
+    data: &mut DriftWm,
 ) -> Result<UdevDevice, Box<dyn std::error::Error>> {
     // 1. Create libseat session
     let (mut session, session_notifier) = LibSeatSession::new()
@@ -254,19 +254,18 @@ pub fn init_udev(
     };
 
     // 4. Store renderer on state + create DMA-BUF global
-    data.state.backend = Some(Backend::Udev(Box::new(renderer)));
-    let formats = data.state.backend.as_mut().unwrap().renderer().dmabuf_formats();
+    data.backend = Some(Backend::Udev(Box::new(renderer)));
+    let formats = data.backend.as_mut().unwrap().renderer().dmabuf_formats();
     let default_feedback = DmabufFeedbackBuilder::new(render_node.dev_id(), formats)
         .build()
         .expect("failed to build dmabuf feedback");
     let dmabuf_global = data
-        .state
         .dmabuf_state
         .create_global_with_default_feedback::<DriftWm>(
-            &data.display.handle(),
+            &data.display_handle,
             &default_feedback,
         );
-    data.state.dmabuf_global = Some(dmabuf_global);
+    data.dmabuf_global = Some(dmabuf_global);
 
     // 5. Set up libinput
     let libinput_session = LibinputSessionInterface::from(session.clone());
@@ -279,13 +278,13 @@ pub fn init_udev(
     event_loop.handle().insert_source(libinput_backend, |mut event, _, data| {
         use smithay::backend::input::InputEvent;
         if let InputEvent::DeviceAdded { device } = &mut event {
-            data.state.configure_libinput_device(device);
+            data.configure_libinput_device(device);
         }
-        data.state.process_input_event(event);
+        data.process_input_event(event);
     })?;
 
     // Store session on state so keyboard handler can call change_vt()
-    data.state.session = Some(session);
+    data.session = Some(session);
 
     // 6. Scan connectors and set up outputs
     log_drm_connectors(&drm);
@@ -304,14 +303,15 @@ pub fn init_udev(
                     connector.interface_id(),
                     crtc,
                 );
+                let dh = data.display_handle.clone();
                 if let Some(surface_data) = create_surface(
                     &mut drm,
                     &gbm,
                     &render_formats,
                     &connector,
                     crtc,
-                    &data.display.handle(),
-                    &mut data.state,
+                    &dh,
+                    data,
                     &saved_output_state,
                 ) {
                     device_surfaces.insert(crtc, surface_data);
@@ -342,9 +342,9 @@ pub fn init_udev(
     // 7. Compile background shader / load tile (shared with winit)
     // Uses first surface's mode for initial background element size (resized per-frame anyway)
     {
-        let mut backend = data.state.backend.take().unwrap();
-        data.state.shadow_shader = crate::render::compile_shadow_shader(backend.renderer());
-        data.state.backend = Some(backend);
+        let mut backend = data.backend.take().unwrap();
+        data.shadow_shader = crate::render::compile_shadow_shader(backend.renderer());
+        data.backend = Some(backend);
     }
 
     // 8. Build shared device state (Rc<RefCell<>> for safe sharing across calloop closures)
@@ -359,7 +359,7 @@ pub fn init_udev(
 
     // 9. Register DRM event source (VBlank handler)
     let device_for_drm = Rc::clone(&device);
-    event_loop.handle().insert_source(drm_notifier, move |event, _meta, data: &mut CalloopData| {
+    event_loop.handle().insert_source(drm_notifier, move |event, _meta, data: &mut DriftWm| {
         let mut dev = device_for_drm.borrow_mut();
         match event {
             DrmEvent::VBlank(crtc) => {
@@ -369,8 +369,8 @@ pub fn init_udev(
                 if let Err(e) = surface.compositor.frame_submitted() {
                     tracing::warn!("frame_submitted error: {e:?}");
                 }
-                data.state.frames_pending.remove(&crtc);
-                if data.state.redraws_needed.contains(&crtc) {
+                data.frames_pending.remove(&crtc);
+                if data.redraws_needed.contains(&crtc) {
                     render_frame(data, &mut surface.compositor, &surface.output, crtc);
                 }
             }
@@ -382,7 +382,7 @@ pub fn init_udev(
 
     // 10. Register session notifier (VT switching)
     let device_for_session = Rc::clone(&device);
-    event_loop.handle().insert_source(session_notifier, move |event, _, data: &mut CalloopData| {
+    event_loop.handle().insert_source(session_notifier, move |event, _, data: &mut DriftWm| {
         let mut dev = device_for_session.borrow_mut();
         match event {
             SessionEvent::PauseSession => {
@@ -400,7 +400,7 @@ pub fn init_udev(
                     return;
                 }
                 // VBlanks for pre-switch frames never arrive
-                data.state.frames_pending.clear();
+                data.frames_pending.clear();
                 for (&crtc, surface) in dev.surfaces.iter_mut() {
                     if let Err(e) = surface.compositor.reset_state() {
                         tracing::warn!("Failed to reset DRM surface state: {e}");
@@ -414,7 +414,7 @@ pub fn init_udev(
 
     // 11. Register udev backend for hotplug
     let device_for_hotplug = Rc::clone(&device);
-    let udev_dispatcher = Dispatcher::new(udev_backend, move |event: UdevEvent, _, data: &mut CalloopData| {
+    let udev_dispatcher = Dispatcher::new(udev_backend, move |event: UdevEvent, _, data: &mut DriftWm| {
         let mut dev = device_for_hotplug.borrow_mut();
         match event {
             UdevEvent::Changed { device_id } => {
@@ -442,35 +442,36 @@ pub fn init_udev(
                                 // Replace any virtual placeholder outputs. The unmap-to-
                                 // create_surface sequence is synchronous within this
                                 // connector handler, so active_output() is never None.
-                                if !data.state.disconnected_outputs.is_empty() {
-                                    let virtual_outputs: Vec<_> = data.state.space.outputs()
-                                        .filter(|o| data.state.disconnected_outputs.contains(&o.name()))
+                                if !data.disconnected_outputs.is_empty() {
+                                    let virtual_outputs: Vec<_> = data.space.outputs()
+                                        .filter(|o| data.disconnected_outputs.contains(&o.name()))
                                         .cloned()
                                         .collect();
                                     for old in &virtual_outputs {
-                                        data.state.space.unmap_output(old);
-                                        data.state.cached_bg_elements.remove(&old.name());
+                                        data.space.unmap_output(old);
+                                        data.cached_bg_elements.remove(&old.name());
                                     }
-                                    data.state.disconnected_outputs.clear();
-                                    data.state.focused_output = None;
+                                    data.disconnected_outputs.clear();
+                                    data.focused_output = None;
                                 }
                                 let saved = crate::state::read_all_per_output_state();
+                                let dh = data.display_handle.clone();
                                 if let Some(sd) = create_surface(
                                     drm,
                                     gbm,
                                     render_formats,
                                     &connector,
                                     crtc,
-                                    &data.display.handle(),
-                                    &mut data.state,
+                                    &dh,
+                                    data,
                                     &saved,
                                 ) {
                                     surfaces.insert(crtc, sd);
-                                    data.state.active_crtcs.insert(crtc);
+                                    data.active_crtcs.insert(crtc);
                                     let surface = surfaces.get_mut(&crtc).unwrap();
                                     // Notify existing toplevels about the new output
                                     driftwm::protocols::foreign_toplevel::send_output_enter_all(
-                                        &mut data.state.foreign_toplevel_state,
+                                        &mut data.foreign_toplevel_state,
                                         &surface.output,
                                     );
                                     render_frame(data, &mut surface.compositor, &surface.output, crtc);
@@ -480,12 +481,12 @@ pub fn init_udev(
                                 tracing::info!("Hotplug: CRTC {crtc:?} disconnected");
                                 if let Some(surface) = surfaces.remove(&crtc) {
                                     driftwm::protocols::foreign_toplevel::send_output_leave_all(
-                                        &mut data.state.foreign_toplevel_state,
+                                        &mut data.foreign_toplevel_state,
                                         &surface.output,
                                     );
 
                                     // Stop capture sessions for this output
-                                    data.state.image_copy_capture_state.remove_output(&surface.output);
+                                    data.image_copy_capture_state.remove_output(&surface.output);
 
                                     // Close layer surfaces on this output so clients
                                     // (swayosd, waybar, etc.) can recreate on remaining outputs
@@ -503,24 +504,24 @@ pub fn init_udev(
                                             "Last output disconnected — keeping virtual output '{}'",
                                             surface.output.name()
                                         );
-                                        data.state.disconnected_outputs.insert(surface.output.name());
-                                        data.state.exit_fullscreen_on(&surface.output);
-                                        data.state.cached_bg_elements.remove(&surface.output.name());
-                                        data.state.lock_surfaces.remove(&surface.output);
+                                        data.disconnected_outputs.insert(surface.output.name());
+                                        data.exit_fullscreen_on(&surface.output);
+                                        data.cached_bg_elements.remove(&surface.output.name());
+                                        data.lock_surfaces.remove(&surface.output);
                                     } else {
-                                        data.state.space.unmap_output(&surface.output);
+                                        data.space.unmap_output(&surface.output);
 
                                         // Cancel any active pointer grab — grabs store an Output
                                         // clone and would operate on stale state after disconnect.
-                                        if let Some(pointer) = data.state.seat.get_pointer() {
+                                        if let Some(pointer) = data.seat.get_pointer() {
                                             let serial = smithay::utils::SERIAL_COUNTER.next_serial();
-                                            pointer.unset_grab(&mut data.state, serial, 0);
+                                            pointer.unset_grab(data, serial, 0);
                                         }
 
                                         // Clean up focused_output if it was on the disconnected output
-                                        if data.state.focused_output.as_ref().is_some_and(|fo| fo == &surface.output) {
-                                            data.state.focused_output = data.state.space.outputs().next().cloned();
-                                            if let Some(ref new_out) = data.state.focused_output {
+                                        if data.focused_output.as_ref().is_some_and(|fo| fo == &surface.output) {
+                                            data.focused_output = data.space.outputs().next().cloned();
+                                            if let Some(ref new_out) = data.focused_output {
                                                 let (cam, zoom, size) = {
                                                     let os = crate::state::output_state(new_out);
                                                     let sz = crate::state::output_logical_size(new_out);
@@ -530,25 +531,25 @@ pub fn init_udev(
                                                     cam.x + size.w as f64 / (2.0 * zoom),
                                                     cam.y + size.h as f64 / (2.0 * zoom),
                                                 ));
-                                                data.state.warp_pointer(center);
+                                                data.warp_pointer(center);
                                             }
                                         }
 
                                         // Clean up gesture state if gesture was on the disconnected output
-                                        if data.state.gesture_output.as_ref().is_some_and(|go| go == &surface.output) {
-                                            data.state.gesture_output = None;
-                                            data.state.gesture_state = None;
+                                        if data.gesture_output.as_ref().is_some_and(|go| go == &surface.output) {
+                                            data.gesture_output = None;
+                                            data.gesture_state = None;
                                         }
 
                                         // Clean up per-output resources
-                                        data.state.cached_bg_elements.remove(&surface.output.name());
-                                        data.state.fullscreen.remove(&surface.output);
-                                        data.state.lock_surfaces.remove(&surface.output);
+                                        data.cached_bg_elements.remove(&surface.output.name());
+                                        data.fullscreen.remove(&surface.output);
+                                        data.lock_surfaces.remove(&surface.output);
                                     }
                                 }
-                                data.state.active_crtcs.remove(&crtc);
-                                data.state.frames_pending.remove(&crtc);
-                                data.state.redraws_needed.remove(&crtc);
+                                data.active_crtcs.remove(&crtc);
+                                data.frames_pending.remove(&crtc);
+                                data.redraws_needed.remove(&crtc);
                             }
                             _ => {}
                         }
@@ -557,7 +558,7 @@ pub fn init_udev(
                 // Notify output management clients after hotplug changes
                 let head_state = collect_output_state_from_surfaces(surfaces, drm);
                 driftwm::protocols::output_management::notify_changes::<DriftWm>(
-                    &mut data.state.output_management_state,
+                    &mut data.output_management_state,
                     head_state,
                 );
             }
@@ -575,13 +576,13 @@ pub fn init_udev(
     {
         let mut dev = device.borrow_mut();
         for (&crtc, surface) in dev.surfaces.iter_mut() {
-            data.state.active_crtcs.insert(crtc);
+            data.active_crtcs.insert(crtc);
             render_frame(data, &mut surface.compositor, &surface.output, crtc);
         }
         // 13. Notify output management clients of initial state
         let head_state = collect_output_state_from_surfaces(&dev.surfaces, &dev.drm);
         driftwm::protocols::output_management::notify_changes::<DriftWm>(
-            &mut data.state.output_management_state,
+            &mut data.output_management_state,
             head_state,
         );
     }
@@ -874,16 +875,15 @@ fn create_surface(
 
 /// Render a single frame and queue it to the DRM compositor.
 fn render_frame(
-    data: &mut CalloopData,
+    data: &mut DriftWm,
     compositor: &mut GbmDrmCompositor,
     output: &Output,
     crtc: crtc::Handle,
 ) {
-    data.state.redraws_needed.remove(&crtc);
+    data.redraws_needed.remove(&crtc);
 
-    // Dispatch Wayland clients
-    log_err("dispatch_clients", data.display.dispatch_clients(&mut data.state));
-    log_err("flush_clients", data.display.flush_clients());
+    // Flush Wayland clients
+    data.display_handle.flush_clients().ok();
 
     // Read per-output state for this frame
     let (cur_camera, cur_zoom, last_cam, last_zoom) = {
@@ -892,29 +892,29 @@ fn render_frame(
     };
 
     // Update background element
-    crate::render::update_background_element(&mut data.state, output, cur_camera, cur_zoom, last_cam, last_zoom);
+    crate::render::update_background_element(data, output, cur_camera, cur_zoom, last_cam, last_zoom);
 
     // Take renderer out to split borrow from state
-    let mut backend = data.state.backend.take().unwrap();
+    let mut backend = data.backend.take().unwrap();
     let renderer = backend.renderer();
 
     // Build cursor + compose frame
-    let cursor_alpha = if data.state.active_output().as_ref() == Some(output) {
+    let cursor_alpha = if data.active_output().as_ref() == Some(output) {
         1.0
     } else {
-        data.state.config.inactive_cursor_opacity as f32
+        data.config.inactive_cursor_opacity as f32
     };
-    let cursor_elements = crate::render::build_cursor_elements(&mut data.state, renderer, cur_camera, cur_zoom, cursor_alpha);
+    let cursor_elements = crate::render::build_cursor_elements(data, renderer, cur_camera, cur_zoom, cursor_alpha);
     let renderer = backend.renderer();
-    let elements = crate::render::compose_frame(&mut data.state, renderer, output, cursor_elements);
+    let elements = crate::render::compose_frame(data, renderer, output, cursor_elements);
 
     // Fulfill pending screencopy requests
     let renderer = backend.renderer();
-    crate::render::render_screencopy(&mut data.state, renderer, output, &elements);
+    crate::render::render_screencopy(data, renderer, output, &elements);
 
     // Fulfill pending ext-image-copy-capture frames
     let renderer = backend.renderer();
-    crate::render::render_capture_frames(&mut data.state, renderer, output, &elements);
+    crate::render::render_capture_frames(data, renderer, output, &elements);
 
     // Render via DRM compositor
     let renderer = backend.renderer();
@@ -928,7 +928,7 @@ fn render_frame(
             if let Err(e) = compositor.queue_frame(()) {
                 tracing::warn!("Failed to queue frame: {e:?}");
             } else {
-                data.state.frames_pending.insert(crtc);
+                data.frames_pending.insert(crtc);
             }
         }
         Err(e) => {
@@ -937,7 +937,7 @@ fn render_frame(
     }
 
     // Put backend back
-    data.state.backend = Some(backend);
+    data.backend = Some(backend);
 
     // Record camera+zoom for next-frame change detection
     {
@@ -945,11 +945,11 @@ fn render_frame(
         os.last_rendered_camera = os.camera;
         os.last_rendered_zoom = os.zoom;
     }
-    data.state.write_state_file_if_dirty();
+    data.write_state_file_if_dirty();
 
     // Post-render
-    crate::render::post_render(&mut data.state, output);
-    log_err("flush_clients", data.display.flush_clients());
+    crate::render::post_render(data, output);
+    data.display_handle.flush_clients().ok();
 }
 
 use driftwm::protocols::output_management::{OutputHeadState, ModeInfo};

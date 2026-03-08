@@ -273,6 +273,16 @@ impl IdleInhibitHandler for DriftWm {
 
 delegate_idle_inhibit!(DriftWm);
 
+use smithay::wayland::idle_notify::{IdleNotifierHandler, IdleNotifierState};
+use smithay::delegate_idle_notify;
+
+impl IdleNotifierHandler for DriftWm {
+    fn idle_notifier_state(&mut self) -> &mut IdleNotifierState<Self> {
+        &mut self.idle_notifier_state
+    }
+}
+delegate_idle_notify!(DriftWm);
+
 delegate_presentation!(DriftWm);
 delegate_single_pixel_buffer!(DriftWm);
 

@@ -18,19 +18,19 @@ use std::time::Duration;
 
 use crate::render::build_cursor_elements;
 use crate::backend::Backend;
-use crate::state::{CalloopData, init_output_state, log_err};
+use crate::state::{DriftWm, init_output_state};
 
 /// Initialize the winit backend: create a window, set up the output, and
 /// start the render loop timer.
 pub fn init_winit(
-    event_loop: &mut EventLoop<'static, CalloopData>,
-    data: &mut CalloopData,
+    event_loop: &mut EventLoop<'static, DriftWm>,
+    data: &mut DriftWm,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let (backend, mut winit_evt) = winit::init::<GlesRenderer>()?;
     let size = backend.window_size();
 
     // Store backend on state so protocol handlers can access the renderer
-    data.state.backend = Some(Backend::Winit(Box::new(backend)));
+    data.backend = Some(Backend::Winit(Box::new(backend)));
     let output = Output::new(
         "winit".to_string(),
         PhysicalProperties {
@@ -48,27 +48,25 @@ pub fn init_winit(
     output.set_preferred(mode);
 
     // Advertise the output as a wl_output global so clients can see it
-    output.create_global::<crate::state::DriftWm>(&data.display.handle());
+    output.create_global::<crate::state::DriftWm>(&data.display_handle);
 
     // Create DMA-BUF global — advertise GPU buffer formats to clients
     let formats = data
-        .state
         .backend
         .as_mut()
         .unwrap()
         .renderer()
         .dmabuf_formats();
     let dmabuf_global = data
-        .state
         .dmabuf_state
-        .create_global::<crate::state::DriftWm>(&data.display.handle(), formats);
-    data.state.dmabuf_global = Some(dmabuf_global);
+        .create_global::<crate::state::DriftWm>(&data.display_handle, formats);
+    data.dmabuf_global = Some(dmabuf_global);
 
     {
-        let mut backend = data.state.backend.take().unwrap();
-        crate::render::init_background(&mut data.state, backend.renderer(), size.to_logical(1), "winit");
-        data.state.shadow_shader = crate::render::compile_shadow_shader(backend.renderer());
-        data.state.backend = Some(backend);
+        let mut backend = data.backend.take().unwrap();
+        crate::render::init_background(data, backend.renderer(), size.to_logical(1), "winit");
+        data.shadow_shader = crate::render::compile_shadow_shader(backend.renderer());
+        data.backend = Some(backend);
     }
 
     // Centre the viewport so canvas origin (0, 0) is in the middle of the screen
@@ -79,11 +77,11 @@ pub fn init_winit(
     ));
 
     // Initialize per-output state for this output
-    init_output_state(&output, initial_camera, data.state.config.friction, Point::from((0, 0)));
-    data.state.focused_output = Some(output.clone());
+    init_output_state(&output, initial_camera, data.config.friction, Point::from((0, 0)));
+    data.focused_output = Some(output.clone());
 
     // Map the output into the space at the initial camera position
-    data.state
+    data
         .space
         .map_output(&output, initial_camera.to_i32_round());
 
@@ -113,7 +111,7 @@ pub fn init_winit(
             },
         );
         driftwm::protocols::output_management::notify_changes::<crate::state::DriftWm>(
-            &mut data.state.output_management_state,
+            &mut data.output_management_state,
             heads,
         );
     }
@@ -126,7 +124,7 @@ pub fn init_winit(
         .handle()
         .insert_source(timer, move |_, _, data| {
             // --- Advance frame counter ---
-            data.state.set_frame_counter(data.state.frame_counter().wrapping_add(1));
+            data.set_frame_counter(data.frame_counter().wrapping_add(1));
 
             // --- Dispatch winit events ---
             let mut stop = false;
@@ -144,7 +142,7 @@ pub fn init_winit(
                     );
                 }
                 WinitEvent::Input(event) => {
-                    data.state.process_input_event(event);
+                    data.process_input_event(event);
                 }
                 WinitEvent::CloseRequested => {
                     stop = true;
@@ -153,39 +151,35 @@ pub fn init_winit(
             });
 
             if stop {
-                data.state.loop_signal.stop();
+                data.loop_signal.stop();
                 return TimeoutAction::Drop;
             }
 
-            // --- Dispatch Wayland client messages before rendering ---
-            log_err(
-                "dispatch_clients",
-                data.display.dispatch_clients(&mut data.state),
-            );
-            log_err("flush_clients", data.display.flush_clients());
+            // --- Flush Wayland client messages before rendering ---
+            data.display_handle.flush_clients().ok();
 
             // --- Delta time ---
             let now = std::time::Instant::now();
-            let dt = (now - data.state.last_frame_instant()).min(std::time::Duration::from_millis(33));
-            data.state.set_last_frame_instant(now);
+            let dt = (now - data.last_frame_instant()).min(std::time::Duration::from_millis(33));
+            data.set_last_frame_instant(now);
 
             // --- Key repeat for compositor bindings ---
-            data.state.apply_key_repeat();
+            data.apply_key_repeat();
 
             // --- Scroll momentum ---
-            data.state.apply_scroll_momentum();
+            data.apply_scroll_momentum();
 
             // --- Edge auto-pan (window drag near viewport edges) ---
-            data.state.apply_edge_pan();
+            data.apply_edge_pan();
 
             // --- Zoom animation (before camera so recomputed target is used) ---
-            data.state.apply_zoom_animation(dt);
+            data.apply_zoom_animation(dt);
 
             // --- Camera animation (window navigation) ---
-            data.state.apply_camera_animation(dt);
+            data.apply_camera_animation(dt);
 
             // --- Exec loading cursor timeout ---
-            data.state.check_exec_cursor_timeout();
+            data.check_exec_cursor_timeout();
 
             // --- Read per-output state for this frame ---
             let (cur_camera, cur_zoom, last_cam, last_zoom) = {
@@ -195,25 +189,25 @@ pub fn init_winit(
 
             // --- Update cached background element ---
             let (camera_moved, zoom_changed) =
-                crate::render::update_background_element(&mut data.state, &output, cur_camera, cur_zoom, last_cam, last_zoom);
+                crate::render::update_background_element(data, &output, cur_camera, cur_zoom, last_cam, last_zoom);
 
             // --- Take backend to split borrow from state ---
-            let Backend::Winit(mut backend) = data.state.backend.take().unwrap()  else {
+            let Backend::Winit(mut backend) = data.backend.take().unwrap()  else {
                 unreachable!("winit timer with non-winit backend");
             };
 
             // --- Build cursor + compose frame ---
-            let cursor_elements = build_cursor_elements(&mut data.state, backend.renderer(), cur_camera, cur_zoom, 1.0);
+            let cursor_elements = build_cursor_elements(data, backend.renderer(), cur_camera, cur_zoom, 1.0);
             let mut age = backend.buffer_age().unwrap_or(0);
-            if data.state.background_tile.is_some() && (camera_moved || zoom_changed) {
+            if data.background_tile.is_some() && (camera_moved || zoom_changed) {
                 age = 0;
             }
             let render_ok = match backend.bind() {
                 Ok((renderer, mut framebuffer)) => {
                     let all_elements =
-                        crate::render::compose_frame(&mut data.state, renderer, &output, cursor_elements);
-                    crate::render::render_screencopy(&mut data.state, renderer, &output, &all_elements);
-                    crate::render::render_capture_frames(&mut data.state, renderer, &output, &all_elements);
+                        crate::render::compose_frame(data, renderer, &output, cursor_elements);
+                    crate::render::render_screencopy(data, renderer, &output, &all_elements);
+                    crate::render::render_capture_frames(data, renderer, &output, &all_elements);
                     let result = damage_tracker.render_output(
                         renderer,
                         &mut framebuffer,
@@ -241,15 +235,15 @@ pub fn init_winit(
                 os.last_rendered_camera = os.camera;
                 os.last_rendered_zoom = os.zoom;
             }
-            data.state.write_state_file_if_dirty();
+            data.write_state_file_if_dirty();
 
             // --- Put backend back ---
-            data.state.backend = Some(Backend::Winit(backend));
+            data.backend = Some(Backend::Winit(backend));
 
             // --- Post-render ---
-            crate::render::refresh_foreign_toplevels(&mut data.state);
-            crate::render::post_render(&mut data.state, &output);
-            log_err("flush_clients", data.display.flush_clients());
+            crate::render::refresh_foreign_toplevels(data);
+            crate::render::post_render(data, &output);
+            data.display_handle.flush_clients().ok();
 
             TimeoutAction::ToDuration(Duration::from_millis(16))
         })?;

@@ -10,7 +10,7 @@ use smithay::{
         calloop::{LoopHandle, LoopSignal},
         wayland_protocols::xdg::shell::server::xdg_toplevel,
         wayland_server::{
-            Display, DisplayHandle,
+            DisplayHandle,
             backend::{ClientData, ClientId, DisconnectReason},
             protocol::wl_surface::WlSurface,
         },
@@ -33,6 +33,7 @@ use smithay::backend::allocator::Fourcc;
 use smithay::wayland::dmabuf::{DmabufGlobal, DmabufState};
 use smithay::wayland::fractional_scale::FractionalScaleManagerState;
 use smithay::wayland::idle_inhibit::IdleInhibitManagerState;
+use smithay::wayland::idle_notify::IdleNotifierState;
 use smithay::wayland::keyboard_shortcuts_inhibit::KeyboardShortcutsInhibitState;
 use smithay::wayland::pointer_constraints::PointerConstraintsState;
 use smithay::wayland::pointer_gestures::PointerGesturesState;
@@ -107,7 +108,7 @@ pub use crate::focus::FocusTarget;
 
 /// Log an error result with context, discarding the Ok value.
 #[inline]
-pub fn log_err(context: &str, result: Result<impl Sized, impl std::fmt::Display>) {
+pub(crate) fn log_err(context: &str, result: Result<impl Sized, impl std::fmt::Display>) {
     if let Err(e) = result {
         tracing::error!("{context}: {e}");
     }
@@ -130,12 +131,6 @@ pub fn spawn_command(cmd: &str) {
     log_err("spawn command", child.spawn());
 }
 
-/// Wrapper held by the calloop event loop — gives callbacks access
-/// to both compositor state and the Wayland display.
-pub struct CalloopData {
-    pub state: DriftWm,
-    pub display: Display<DriftWm>,
-}
 
 /// Saved viewport state for HomeToggle return — includes optional fullscreen window.
 #[derive(Clone)]
@@ -236,7 +231,7 @@ pub struct DriftWm {
     // -- global: infrastructure --
     pub start_time: Instant,
     pub display_handle: DisplayHandle,
-    pub loop_handle: LoopHandle<'static, CalloopData>,
+    pub loop_handle: LoopHandle<'static, DriftWm>,
     pub loop_signal: LoopSignal,
 
     // -- global: desktop --
@@ -296,6 +291,7 @@ pub struct DriftWm {
     pub keyboard_shortcuts_inhibit_state: KeyboardShortcutsInhibitState,
     #[allow(dead_code)]
     pub idle_inhibit_state: IdleInhibitManagerState,
+    pub idle_notifier_state: IdleNotifierState<DriftWm>,
     #[allow(dead_code)]
     pub presentation_state: PresentationState,
     #[allow(dead_code)]
@@ -404,7 +400,7 @@ impl ClientData for ClientState {
 impl DriftWm {
     pub fn new(
         dh: DisplayHandle,
-        loop_handle: LoopHandle<'static, CalloopData>,
+        loop_handle: LoopHandle<'static, DriftWm>,
         loop_signal: LoopSignal,
     ) -> Self {
         let compositor_state = CompositorState::new::<Self>(&dh);
@@ -430,6 +426,7 @@ impl DriftWm {
         let _pointer_gestures_state = PointerGesturesState::new::<Self>(&dh);
         let keyboard_shortcuts_inhibit_state = KeyboardShortcutsInhibitState::new::<Self>(&dh);
         let idle_inhibit_state = IdleInhibitManagerState::new::<Self>(&dh);
+        let idle_notifier_state = IdleNotifierState::new(&dh, loop_handle.clone());
         let presentation_state = PresentationState::new::<Self>(&dh, 1); // CLOCK_MONOTONIC
         let decoration_state = XdgDecorationState::new::<Self>(&dh);
         let layer_shell_state = WlrLayerShellState::new::<Self>(&dh);
@@ -508,6 +505,7 @@ impl DriftWm {
             relative_pointer_state,
             keyboard_shortcuts_inhibit_state,
             idle_inhibit_state,
+            idle_notifier_state,
             presentation_state,
             decoration_state,
             layer_shell_state,

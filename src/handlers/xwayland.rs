@@ -1,4 +1,4 @@
-use crate::state::{CalloopData, DriftWm, FocusTarget};
+use crate::state::{DriftWm, FocusTarget};
 use driftwm::window_ext::WindowExt;
 use smithay::{
     delegate_xwayland_shell,
@@ -36,80 +36,6 @@ fn x11_edge_to_xdg(edge: ResizeEdge) -> xdg_toplevel::ResizeEdge {
     }
 }
 
-// ---- Calloop wrappers (X11Wm::start_wm requires D = CalloopData) ----
-
-impl XwmHandler for CalloopData {
-    fn xwm_state(&mut self, xwm: XwmId) -> &mut X11Wm {
-        XwmHandler::xwm_state(&mut self.state, xwm)
-    }
-    fn new_window(&mut self, xwm: XwmId, window: X11Surface) {
-        XwmHandler::new_window(&mut self.state, xwm, window);
-    }
-    fn new_override_redirect_window(&mut self, xwm: XwmId, window: X11Surface) {
-        XwmHandler::new_override_redirect_window(&mut self.state, xwm, window);
-    }
-    fn map_window_request(&mut self, xwm: XwmId, window: X11Surface) {
-        XwmHandler::map_window_request(&mut self.state, xwm, window);
-    }
-    fn mapped_override_redirect_window(&mut self, xwm: XwmId, window: X11Surface) {
-        XwmHandler::mapped_override_redirect_window(&mut self.state, xwm, window);
-    }
-    fn unmapped_window(&mut self, xwm: XwmId, window: X11Surface) {
-        XwmHandler::unmapped_window(&mut self.state, xwm, window);
-    }
-    fn destroyed_window(&mut self, xwm: XwmId, window: X11Surface) {
-        XwmHandler::destroyed_window(&mut self.state, xwm, window);
-    }
-    fn configure_request(
-        &mut self, xwm: XwmId, window: X11Surface,
-        x: Option<i32>, y: Option<i32>, w: Option<u32>, h: Option<u32>,
-        reorder: Option<Reorder>,
-    ) {
-        XwmHandler::configure_request(&mut self.state, xwm, window, x, y, w, h, reorder);
-    }
-    fn configure_notify(
-        &mut self, xwm: XwmId, window: X11Surface,
-        geometry: Rectangle<i32, Logical>,
-        above: Option<smithay::xwayland::xwm::X11Window>,
-    ) {
-        XwmHandler::configure_notify(&mut self.state, xwm, window, geometry, above);
-    }
-    fn resize_request(&mut self, xwm: XwmId, window: X11Surface, button: u32, edge: ResizeEdge) {
-        XwmHandler::resize_request(&mut self.state, xwm, window, button, edge);
-    }
-    fn move_request(&mut self, xwm: XwmId, window: X11Surface, button: u32) {
-        XwmHandler::move_request(&mut self.state, xwm, window, button);
-    }
-    fn allow_selection_access(&mut self, xwm: XwmId, sel: SelectionTarget) -> bool {
-        XwmHandler::allow_selection_access(&mut self.state, xwm, sel)
-    }
-    fn send_selection(&mut self, xwm: XwmId, sel: SelectionTarget, mime: String, fd: std::os::fd::OwnedFd) {
-        XwmHandler::send_selection(&mut self.state, xwm, sel, mime, fd);
-    }
-    fn new_selection(&mut self, xwm: XwmId, sel: SelectionTarget, mimes: Vec<String>) {
-        XwmHandler::new_selection(&mut self.state, xwm, sel, mimes);
-    }
-    fn cleared_selection(&mut self, xwm: XwmId, sel: SelectionTarget) {
-        XwmHandler::cleared_selection(&mut self.state, xwm, sel);
-    }
-    fn fullscreen_request(&mut self, xwm: XwmId, window: X11Surface) {
-        XwmHandler::fullscreen_request(&mut self.state, xwm, window);
-    }
-    fn unfullscreen_request(&mut self, xwm: XwmId, window: X11Surface) {
-        XwmHandler::unfullscreen_request(&mut self.state, xwm, window);
-    }
-}
-
-impl XWaylandShellHandler for CalloopData {
-    fn xwayland_shell_state(&mut self) -> &mut XWaylandShellState {
-        XWaylandShellHandler::xwayland_shell_state(&mut self.state)
-    }
-    fn surface_associated(&mut self, xwm: XwmId, wl_surface: WlSurface, surface: X11Surface) {
-        XWaylandShellHandler::surface_associated(&mut self.state, xwm, wl_surface, surface);
-    }
-}
-
-// ---- Primary impls on DriftWm (Wayland dispatch uses DriftWm as state type) ----
 
 impl XwmHandler for DriftWm {
     fn xwm_state(&mut self, _xwm: XwmId) -> &mut X11Wm {

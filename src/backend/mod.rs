@@ -27,7 +27,7 @@ impl Backend {
 /// On `Ready`, starts the X11 window manager and sets `DISPLAY`.
 pub fn spawn_xwayland(
     dh: &smithay::reexports::wayland_server::DisplayHandle,
-    loop_handle: &smithay::reexports::calloop::LoopHandle<'static, crate::state::CalloopData>,
+    loop_handle: &smithay::reexports::calloop::LoopHandle<'static, crate::state::DriftWm>,
 ) {
     use smithay::xwayland::{XWayland, XWaylandEvent};
     use smithay::xwayland::xwm::X11Wm;
@@ -57,13 +57,13 @@ pub fn spawn_xwayland(
             {
                 tracing::warn!("Failed to export DISPLAY: {e}");
             }
-            data.state.x11_display = Some(display_number);
-            data.state.xwayland_client = Some(client.clone());
+            data.x11_display = Some(display_number);
+            data.xwayland_client = Some(client.clone());
 
             match X11Wm::start_wm(handle.clone(), x11_socket, client.clone()) {
                 Ok(wm) => {
                     tracing::info!("X11 window manager started");
-                    data.state.x11_wm = Some(wm);
+                    data.x11_wm = Some(wm);
                 }
                 Err(err) => {
                     tracing::error!("Failed to start X11 WM: {err}");
@@ -74,41 +74,41 @@ pub fn spawn_xwayland(
             tracing::warn!("XWayland crashed, restarting...");
 
             // Clean up dead X11 state
-            data.state.x11_wm = None;
-            data.state.xwayland_client = None;
-            data.state.x11_display = None;
-            data.state.x11_override_redirect.clear();
+            data.x11_wm = None;
+            data.xwayland_client = None;
+            data.x11_display = None;
+            data.x11_override_redirect.clear();
             // SAFETY: no other threads mutate env vars concurrently
             unsafe { std::env::remove_var("DISPLAY"); }
 
             // Collect X11 windows to remove
-            let x11_windows: Vec<_> = data.state.space.elements()
+            let x11_windows: Vec<_> = data.space.elements()
                 .filter(|w| w.x11_surface().is_some())
                 .cloned()
                 .collect();
 
             // Restore fullscreen state for any fullscreen X11 windows
-            let fs_outputs: Vec<_> = data.state.fullscreen.iter()
+            let fs_outputs: Vec<_> = data.fullscreen.iter()
                 .filter(|(_, fs)| x11_windows.contains(&fs.window))
                 .map(|(o, _)| o.clone())
                 .collect();
             for output in fs_outputs {
-                if let Some(fs) = data.state.fullscreen.remove(&output) {
+                if let Some(fs) = data.fullscreen.remove(&output) {
                     crate::state::output_state(&output).camera = fs.saved_camera;
                     crate::state::output_state(&output).zoom = fs.saved_zoom;
                 }
             }
             if !x11_windows.is_empty() {
-                data.state.update_output_from_camera();
+                data.update_output_from_camera();
             }
 
             // Clear keyboard focus if it's on a dying X11 window
-            let keyboard = data.state.seat.get_keyboard().unwrap();
+            let keyboard = data.seat.get_keyboard().unwrap();
             if let Some(focused) = keyboard.current_focus()
                 && x11_windows.iter().any(|w| w.wl_surface().as_deref() == Some(&focused.0))
             {
                 keyboard.set_focus(
-                    &mut data.state,
+                    data,
                     None::<crate::state::FocusTarget>,
                     smithay::utils::SERIAL_COUNTER.next_serial(),
                 );
@@ -118,16 +118,16 @@ pub fn spawn_xwayland(
             for w in &x11_windows {
                 if let Some(wl_surface) = w.wl_surface() {
                     let id = Resource::id(&*wl_surface);
-                    data.state.decorations.remove(&id);
-                    data.state.pending_ssd.remove(&id);
-                    data.state.pending_center.remove(&*wl_surface);
+                    data.decorations.remove(&id);
+                    data.pending_ssd.remove(&id);
+                    data.pending_center.remove(&*wl_surface);
                 }
-                data.state.focus_history.retain(|fw| fw != w);
-                data.state.space.unmap_elem(w);
+                data.focus_history.retain(|fw| fw != w);
+                data.space.unmap_elem(w);
             }
 
             // Restart XWayland
-            spawn_xwayland(&data.state.display_handle, &handle);
+            spawn_xwayland(&data.display_handle, &handle);
 
             std::process::Command::new("notify-send")
                 .args(["-u", "critical", "XWayland crashed", "X11 apps were lost. XWayland has been restarted."])
