@@ -28,6 +28,7 @@ use smithay::{
         rustix::fs::OFlags,
     },
     utils::{DeviceFd, Transform},
+    wayland::dmabuf::DmabufFeedbackBuilder,
 };
 
 use smithay_drm_extras::drm_scanner::{DrmScanEvent, DrmScanner};
@@ -162,7 +163,7 @@ pub fn init_udev(
     // 3. Try each GPU until one has connected displays
     let open_flags = OFlags::RDWR | OFlags::CLOEXEC | OFlags::NOCTTY | OFlags::NONBLOCK;
 
-    let (mut drm, drm_notifier, gbm, renderer, render_formats) = 'found: {
+    let (mut drm, drm_notifier, gbm, renderer, render_formats, render_node) = 'found: {
         for path in &gpu_paths {
             let node = match DrmNode::from_path(path) {
                 Ok(n) => n,
@@ -241,8 +242,13 @@ pub fn init_udev(
                     }
                 };
 
+            let render_node = node
+                .node_with_type(NodeType::Render)
+                .and_then(|n| n.ok())
+                .unwrap_or(node);
+
             tracing::info!("Using GPU: {}", path.display());
-            break 'found (drm, drm_notifier, gbm, renderer, render_formats);
+            break 'found (drm, drm_notifier, gbm, renderer, render_formats, render_node);
         }
         return Err("No GPU with connected displays found (are you running from a TTY?)".into());
     };
@@ -250,10 +256,16 @@ pub fn init_udev(
     // 4. Store renderer on state + create DMA-BUF global
     data.state.backend = Some(Backend::Udev(Box::new(renderer)));
     let formats = data.state.backend.as_mut().unwrap().renderer().dmabuf_formats();
+    let default_feedback = DmabufFeedbackBuilder::new(render_node.dev_id(), formats)
+        .build()
+        .expect("failed to build dmabuf feedback");
     let dmabuf_global = data
         .state
         .dmabuf_state
-        .create_global::<DriftWm>(&data.display.handle(), formats);
+        .create_global_with_default_feedback::<DriftWm>(
+            &data.display.handle(),
+            &default_feedback,
+        );
     data.state.dmabuf_global = Some(dmabuf_global);
 
     // 5. Set up libinput

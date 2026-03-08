@@ -39,10 +39,11 @@ trackpad gestures. No workspaces, no tiling — just drift.
   - `wlr-layer-shell` — status bars, launchers, overlays (waybar, fuzzel)
   - `zwlr-foreign-toplevel-management` — taskbar window switching
   - `zwlr-output-management` — runtime output configuration (wlr-randr, wdisplays)
+  - `ext-image-capture-source` + `ext-image-copy-capture` — screencasting (xdg-desktop-portal-wlr, OBS, Firefox)
+  - `wp_pointer_gestures` — gesture forwarding to clients
+  - `xwayland-shell` — X11 app support via Xwayland
 
-  Not yet implemented:
-  - `ext-image-capture-source` + `ext-image-copy-capture` — newer screenshot/screencast capture (replaces wlr-screencopy, used by xdg-desktop-portal-wlr for OBS/Firefox screen share)
-  - XWayland — run X11 apps
+  See `docs/protocol-plan.md` for the missing protocol roadmap.
 
 ## Core concept: infinite canvas
 
