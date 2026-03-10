@@ -131,7 +131,7 @@ only specify what you want to change. Use `"none"` to unbind a default binding.
 11. **Window rules** — app*id matching, widget mode, state file, xdg-decoration *(done)\_
 12. **Decorations** — SSD fallback, title bar, shadows, resize grab zones _(done)_
 13. **Multi-monitor** — per-output viewports, input routing, hotplug, output config _(done)_
-14. XWayland — X11 app support
+14. **XWayland** — X11 app support _(done)_
 
 ## License
 
