@@ -23,8 +23,8 @@
 # layout_independent = true  # match bindings by physical key position across layouts
 
 [input.scroll]
-# speed = 1.0                 # pan/zoom speed multiplier (applied to all inputs)
-# friction = 0.96             # momentum decay (0.90=snappy, 0.98=floaty)
+# speed = 1.5                 # viewport pan speed multiplier
+# friction = 0.94             # momentum decay (0.90=snappy, 0.98=floaty)
 
 [input.trackpad]
 # tap_to_click = true         # enable tap-to-click
