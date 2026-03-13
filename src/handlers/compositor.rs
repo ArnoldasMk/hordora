@@ -585,6 +585,9 @@ impl DriftWm {
         }
 
         self.space.map_element(window.clone(), new_loc, false);
+        if driftwm::config::applied_rule(surface).is_some_and(|r| r.no_focus) {
+            self.enforce_below_windows();
+        }
 
         // If we're waiting for the final commit, go idle
         if matches!(resize_state, ResizeState::WaitingForLastCommit { .. }) {

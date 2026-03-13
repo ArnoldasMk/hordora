@@ -112,14 +112,14 @@ impl DriftWm {
                 self.gesture_output = self.active_output();
                 match entry {
                     GestureConfigEntry::Continuous(ContinuousAction::MoveWindow) => {
-                        if let Some((window, _)) = self.focusable_window_under(pos) {
+                        if let Some((window, _)) = self.window_under(pos) {
                             return self.start_gesture_move(window, pos);
                         }
                         // Not over a moveable window — flush and fall through
                         self.flush_middle_click(pending.press_time, pending.release_time);
                     }
                     GestureConfigEntry::Continuous(ContinuousAction::ResizeWindow) => {
-                        if let Some((window, _)) = self.focusable_window_under(pos)
+                        if let Some((window, _)) = self.window_under(pos)
                             .filter(|(w, _)| {
                                 !w.wl_surface().as_ref().and_then(|s| driftwm::config::applied_rule(s))
                                     .is_some_and(|r| r.widget)
@@ -153,14 +153,14 @@ impl DriftWm {
                         self.gesture_state = Some(GestureState::SwipePan);
                     }
                     ContinuousAction::MoveWindow => {
-                        if let Some((window, _)) = self.focusable_window_under(pos) {
+                        if let Some((window, _)) = self.window_under(pos) {
                             return self.start_gesture_move(window, pos);
                         }
                         // Not over window — fall back to pan
                         self.gesture_state = Some(GestureState::SwipePan);
                     }
                     ContinuousAction::ResizeWindow => {
-                        if let Some((window, _)) = self.focusable_window_under(pos)
+                        if let Some((window, _)) = self.window_under(pos)
                             .filter(|(w, _)| {
                                 !w.wl_surface().as_ref().and_then(|s| driftwm::config::applied_rule(s))
                                     .is_some_and(|r| r.widget)
@@ -752,18 +752,20 @@ impl DriftWm {
     /// handles window positioning (identical to Alt+click drag).
     /// If the window is pinned, falls through to Swipe3Pan instead.
     fn start_gesture_move(&mut self, window: Window, pos: Point<f64, Logical>) {
-        if window.wl_surface().as_ref().and_then(|s| driftwm::config::applied_rule(s))
-            .is_some_and(|r| r.widget)
-        {
+        let rule = window.wl_surface().as_ref().and_then(|s| driftwm::config::applied_rule(s));
+        if rule.as_ref().is_some_and(|r| r.widget) {
             self.gesture_state = Some(GestureState::SwipePan);
             return;
         }
-        self.space.raise_element(&window, true);
-        self.enforce_below_windows();
+        let no_focus = rule.as_ref().is_some_and(|r| r.no_focus);
         let serial = SERIAL_COUNTER.next_serial();
-        let keyboard = self.seat.get_keyboard().unwrap();
-        let Some(surface) = window.wl_surface().map(|s| s.into_owned()) else { return; };
-        keyboard.set_focus(self, Some(FocusTarget(surface)), serial);
+        if !no_focus {
+            self.space.raise_element(&window, true);
+            let keyboard = self.seat.get_keyboard().unwrap();
+            let Some(surface) = window.wl_surface().map(|s| s.into_owned()) else { return; };
+            keyboard.set_focus(self, Some(FocusTarget(surface)), serial);
+        }
+        self.enforce_below_windows();
 
         let initial_window_location = self.space.element_location(&window).unwrap_or_default();
         let pointer = self.seat.get_pointer().unwrap();
@@ -784,12 +786,17 @@ impl DriftWm {
 
     /// Enter Swipe3Resize state: store initial geometry, set resize state + cursor.
     fn start_gesture_resize(&mut self, window: Window, pos: Point<f64, Logical>) {
-        self.space.raise_element(&window, true);
-        self.enforce_below_windows();
+        let no_focus = window.wl_surface().as_ref()
+            .and_then(|s| driftwm::config::applied_rule(s))
+            .is_some_and(|r| r.no_focus);
         let serial = SERIAL_COUNTER.next_serial();
-        let keyboard = self.seat.get_keyboard().unwrap();
         let Some(wl_surface) = window.wl_surface().map(|s| s.into_owned()) else { return; };
-        keyboard.set_focus(self, Some(FocusTarget(wl_surface.clone())), serial);
+        if !no_focus {
+            self.space.raise_element(&window, true);
+            let keyboard = self.seat.get_keyboard().unwrap();
+            keyboard.set_focus(self, Some(FocusTarget(wl_surface.clone())), serial);
+        }
+        self.enforce_below_windows();
 
         let initial_location = self.space.element_location(&window).unwrap();
         let initial_size = window.geometry().size;
@@ -840,18 +847,14 @@ impl DriftWm {
         }
     }
 
-    /// Return the focusable window under `pos`, filtering out `no_focus` windows.
-    fn focusable_window_under(
+    /// Return the window under `pos` for move/resize gestures.
+    fn window_under(
         &self,
         pos: Point<f64, Logical>,
     ) -> Option<(Window, Point<i32, Logical>)> {
         self.space
             .element_under(pos)
             .map(|(w, l)| (w.clone(), l))
-            .filter(|(w, _)| {
-                !w.wl_surface().as_ref().and_then(|s| driftwm::config::applied_rule(s))
-                    .is_some_and(|r| r.no_focus)
-            })
     }
 
     /// Read camera/zoom from the pinned gesture output, falling back to active output.
