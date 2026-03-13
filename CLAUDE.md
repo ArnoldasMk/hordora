@@ -1,12 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project
 
 driftwm — a trackpad-first infinite canvas Wayland compositor written in Rust. Windows float on an unbounded 2D plane navigated via trackpad gestures (pan, zoom, pinch). No workspaces, no tiling. Built on [smithay](https://github.com/Smithay/smithay).
 
-The project is past milestone 13 (multi-monitor). Recent work: Xwayland, screencasting, idle-notify, power menu. See `docs/DESIGN.md` for the full specification and `docs/CAVEATS.md` for architectural pitfalls.
+The project is past milestone 13 (multi-monitor). See `docs/DESIGN.md` for the full specification and `docs/CAVEATS.md` for architectural pitfalls.
 
 ## Conventions
 
@@ -42,6 +40,7 @@ The compositor uses a **camera/viewport** model: the screen is a viewport onto a
 
 Current source layout:
 
+- `main.rs` — entry point (CLI args, backend selection), `lib.rs` — crate root (module declarations)
 - `backend/` — `mod.rs` (Backend enum: Winit/Udev + renderer accessor), `winit.rs` (winit backend init + ~60fps timer render loop), `udev.rs` (udev/DRM backend init + VBlank-driven render loop, libseat session, libinput, hotplug)
 - `state/` — `mod.rs` (DriftWm struct, FullscreenState, ClientState), `animation.rs` (camera/zoom/momentum/edge-pan animation, key repeat), `navigation.rs` (navigate_to_window, focus history, MRU cycle), `fullscreen.rs` (enter/exit fullscreen, pointer remap)
 - `config/` — `mod.rs` (Config struct, load/parse, context-aware lookup methods), `types.rs` (Action, Direction, Modifiers, KeyCombo, MouseBinding/MouseTrigger/MouseAction, GestureBinding/GestureTrigger, ContinuousAction/ThresholdAction, ContextBindings, BindingContext), `parse.rs` (string→type parsers for combos/actions/gestures), `defaults.rs` (default key/mouse/gesture bindings per context, terminal/launcher detection), `toml.rs` (serde structs, config path)
@@ -49,13 +48,13 @@ Current source layout:
 - `focus.rs` — FocusTarget(WlSurface) newtype with KeyboardTarget/PointerTarget/TouchTarget impls
 - `decorations.rs` — per-window SSD state, CPU-rendered title bar, hit-testing helpers
 - `render.rs` — OutputRenderElements, compose_frame(), post_render(), update_background_element(), tile/cursor/layer rendering helpers
-- `shaders/` — GLSL shader source files (background dot grid, shadow, etc.)
+- `shaders/` — GLSL shader source files (dot_grid, shadow, blur_down/blur_up/blur_mask, corner_clip)
 - `snap.rs` — window snapping (magnetic edge alignment during drag)
 - `window_ext.rs` — `WindowExt` trait for Wayland/X11 window polymorphism
 - `input/` — `mod.rs` (keyboard handling, pointer motion absolute+relative, surface_under hit-testing), `actions.rs` (execute_action dispatch for all keybindings), `pointer.rs` (context-aware mouse dispatch, button/axis handling, compositor resize/pan grabs), `gestures.rs` (table-driven gesture dispatch from config, continuous/threshold state machine, libinput device config, client forwarding)
-- `grabs/` — `move_grab.rs` (MoveSurfaceGrab), `resize_grab.rs` (ResizeSurfaceGrab, ResizeState), `pan_grab.rs` (PanGrab for viewport panning), `navigate_grab.rs` (NavigateGrab for directional window navigation)
+- `grabs/` — `mod.rs`, `move_grab.rs` (MoveSurfaceGrab), `resize_grab.rs` (ResizeSurfaceGrab, ResizeState), `pan_grab.rs` (PanGrab for viewport panning), `navigate_grab.rs` (NavigateGrab for directional window navigation)
 - `handlers/` — `compositor.rs` (commit, resize repositioning, dmabuf, layer commit), `layer_shell.rs` (wlr-layer-shell handler), `xdg_shell.rs` (CSD move/resize, window centering, fullscreen, popup grabs), `xwayland.rs` (X11 window management), `mod.rs` (seat, data device, output, cursor_shape, foreign toplevel, session lock, xdg-decoration, output management, protocol delegates)
-- `protocols/` — `foreign_toplevel.rs` (zwlr-foreign-toplevel-management-v1), `output_management.rs` (zwlr-output-management-v1), `screencopy.rs` (wlr-screencopy), `image_copy_capture.rs` (ext-image-copy-capture-v1), `image_capture_source.rs` (ext-image-capture-source-v1)
+- `protocols/` — `mod.rs`, `foreign_toplevel.rs` (zwlr-foreign-toplevel-management-v1), `output_management.rs` (zwlr-output-management-v1), `screencopy.rs` (wlr-screencopy), `image_copy_capture.rs` (ext-image-copy-capture-v1), `image_capture_source.rs` (ext-image-capture-source-v1)
 
 ## Key Design Decisions
 
