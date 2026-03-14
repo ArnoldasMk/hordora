@@ -197,6 +197,8 @@ Default bindings:
 | 3-finger swipe               | anywhere  | Pan viewport (continuous)          |
 | 3-finger doubletap-swipe     | on-window | Move window                        |
 | Alt+3-finger swipe           | on-window | Resize window                      |
+| Alt+2-finger pinch-in/out    | on-window | Fit window (toggle)                |
+| Alt+3-finger pinch-in/out    | on-window | Toggle fullscreen                  |
 | 3-finger pinch               | anywhere  | Zoom in/out (continuous)           |
 | Mod+3-finger swipe           | anywhere  | Center nearest window (threshold)  |
 | Mod+3-finger pinch-in        | anywhere  | Zoom-to-fit                        |
@@ -253,8 +255,9 @@ and `[mouse.anywhere]`. Default bindings:
 | Pan viewport     | `Mod` + trackpad scroll            | anywhere  |
 | Move window      | `Alt` + left-drag                  | on-window |
 | Resize window    | `Alt` + right-drag                 | on-window |
+| Fit window       | `Alt` + middle-click               | on-window |
+| Toggle fullscreen| `Mod` + middle-click               | on-window |
 | Center nearest   | `Mod+Ctrl` + left-drag (natural)   | anywhere  |
-| Toggle fullscreen| `Alt` + middle-click               | on-window |
 
 **Trackpad vs mouse wheel**: both produce axis events but serve different
 purposes. Separate triggers (`trackpad-scroll` and `wheel-scroll`) allow
@@ -305,6 +308,7 @@ appears (for apps), `spawn <cmd>` runs silently (for toggles, OSD, screenshots).
 | `Super+Q`           | Close focused window                   |
 | `Super+C`           | Center focused window + reset zoom     |
 | `Super+F`           | Toggle fullscreen                      |
+| `Super+M`           | Fit window to viewport (maximize/restore) |
 | `Super+Shift+Arrow` | Nudge focused window 20px in direction |
 
 ### Navigation
@@ -353,21 +357,39 @@ appears (for apps), `spawn <cmd>` runs silently (for toggles, OSD, screenshots).
 
 ## Window decorations
 
-**Strategy**: CSD-first via `xdg-decoration` protocol. Compositor advertises
+**Strategy**: CSD-preferred via `xdg-decoration` protocol. Compositor advertises
 only `close` and `fullscreen` capabilities via `xdg-toplevel` — no maximize,
 no minimize. GTK/Qt apps hide those buttons automatically.
 
-- **CSD apps** (GTK4, GTK3, most GNOME apps): draw their own title bar with
-  close button only. Compositor does nothing.
-- **Borderless windows**: window rules can set `decoration = "none"` — client
-  removes its CSD via `xdg-decoration`, compositor draws nothing. Used for
-  widgets and special windows.
-- **SSD fallback** (XWayland apps, some Qt apps that render with zero
-  decorations): compositor draws a minimal title bar + close button.
-  - 25px title bar with rounded top corners (radius 8)
-  - Thin × close button, right-aligned with 8px padding
-  - Gaussian drop shadow (radius 14, GLSL shader)
-  - Invisible resize borders (8px) around SSD windows for edge/corner resize
+All CSD and SSD windows get consistent compositor-applied treatment:
+- **Corner rounding**: compositor clips windows to `corner_radius` (default 8).
+  Overrides client-drawn corners for consistency (some GTK3 apps render square
+  or mismatched corners).
+- **Shadow**: compositor strips client shadows and renders its own Gaussian drop
+  shadow (radius 14, GLSL shader). Consistent shadow appearance across all apps.
+
+### CSD (default)
+
+CSD apps (GTK4, GTK3, most GNOME apps) draw their own title bar with close
+button only. Compositor adds corner rounding and shadow on top.
+
+### SSD fallback
+
+XWayland apps and some Qt apps that render with zero decorations get
+compositor-drawn decorations:
+- 25px title bar with rounded top corners, no title text
+- Thin × close button, right-aligned with 8px padding
+- Invisible resize borders (8px) around SSD windows for edge/corner resize
+- **Double-tap title bar** triggers fit-window (maximize/restore)
+
+### Borderless
+
+Window rules can set `decoration = "none"` — client removes its CSD via
+`xdg-decoration`, compositor draws nothing. No corner rounding, no shadow.
+Truly borderless. Used for widgets and special windows.
+
+### Interaction and config
+
 - **Interaction**: click title bar to drag, click × to close, drag borders to
   resize, hover × changes cursor to pointer.
 - **Window rules**: `decoration` field controls mode — `"client"` (default,
@@ -397,8 +419,12 @@ on the canvas.
 ## Stacking / overlap
 
 Windows can overlap. Click or gesture-interact with a window to raise it.
-No minimize, no maximize (fullscreen replaces maximize). Hidden windows aren't
-hidden — they're just somewhere else on the canvas. Pan to find them.
+No minimize. **Fit-window** (`Super+M`) is the maximize analogue — it centers
+the viewport on the focused window, resets zoom to 1.0, and resizes the window
+to fill the viewport. Toggling again restores the original window size but
+leaves zoom unchanged. Fullscreen (`Super+F`) is a separate concept (true
+exclusive fullscreen). Hidden windows aren't hidden — they're just somewhere
+else on the canvas. Pan to find them.
 
 ## Widgets
 
@@ -742,3 +768,4 @@ requiring real hardware (udev/TTY). Milestones 1–8 work entirely in winit.
 13. **Multi-monitor** — per-output viewports, input routing, hotplug, output config, wlr-output-management _(done)_
 14. **XWayland** — X11 app support via Xwayland, WindowExt trait for polymorphism _(done)_
 15. **Blur** — multi-pass Kawase blur, per-window via window rules, opacity support _(done)_
+16. **Pinned-to-screen** — `pinned_to_screen` window rule: window stays always on top, position in viewport (screen) coordinates instead of canvas coordinates

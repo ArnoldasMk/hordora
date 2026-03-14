@@ -2,86 +2,226 @@
 
 A trackpad-first infinite canvas Wayland compositor.
 
-<!-- TODO: hero GIF here — pan/zoom across a few windows -->
+<!--
+  Hero video (~10s, one continuous take, no cuts):
+  1. Start with 3-4 windows visible at zoom 1.0 (terminal, browser, something colorful)
+  2. 3-finger swipe to pan across the canvas — show more windows off-screen
+  3. Pinch out to zoom out, revealing the full layout scattered across the canvas
+  4. 4-finger swipe to jump to a distant window
+  5. End centered on that window at zoom 1.0
+-->
 
-Traditional window managers arrange windows to fit your screen. driftwm flips this: windows float on an infinite 2D canvas and you move the viewport around them. Pan, zoom, and navigate with trackpad gestures. No workspaces, no tiling — just drift.
+Traditional window managers arrange windows to fit your screen. driftwm flips this: windows float on an infinite 2D canvas and you move the viewport around them. Designed with laptops in mind — trackpad support keeps getting better while display size stays limited, so treating your screen as a camera onto a larger canvas makes sense. Pan, zoom, and navigate with trackpad gestures. No workspaces, no tiling — just drift.
 
 Built on [smithay](https://github.com/Smithay/smithay). Inspired by [vxwm](https://codeberg.org/wh1tepearl/vxwm) and [niri](https://github.com/YaLTeR/niri).
 
-## How it works
+## Concept
 
-The screen is a viewport onto an infinite 2D plane. Each window has absolute
-coordinates on this plane. You navigate with trackpad gestures:
+Think Figma or Google Maps, but for your desktop. Your screen is a viewport
+onto an infinite canvas where windows live. Pan around to find what you need,
+zoom out to see everything at once, zoom back in to focus. Place windows
+anywhere — there are no edges, no workspaces, no grids.
 
-<!-- TODO: GIF — gesture pan across canvas -->
-
-| Gesture                              | Action                                   |
-| ------------------------------------ | ---------------------------------------- |
-| 3-finger swipe                       | Pan viewport                             |
-| 2-finger pinch (on canvas)           | Zoom                                     |
-| 3-finger pinch                       | Zoom                                     |
-| 4-finger swipe                       | Jump to nearest window in that direction |
-| 4-finger pinch in                    | Zoom-to-fit (overview of all windows)    |
-| 4-finger pinch out                   | Home toggle                              |
-| 4-finger hold                        | Center focused window                    |
-| 3-finger doubletap-swipe (on window) | Move window                              |
-| Alt + 3-finger swipe (on window)     | Resize window                            |
-
-**Small trackpad?** Hold `Mod` to use 3-finger instead of 4-finger for all
-navigation gestures.
-
-**Mouse:** trackpad scroll pans, mouse wheel zooms on empty canvas.
-`Mod` + drag/scroll works anywhere. `Mod+Ctrl` + drag navigates to nearest
-window. `Alt` + drag to move (LMB) / resize (RMB).
-
-All gesture and mouse bindings are context-aware (on-window, on-canvas,
-anywhere) and fully configurable. Unbound gestures forward to apps.
+Zoom is cursor-anchored — the point under your cursor stays fixed as you zoom
+in or out, just like pinch-to-zoom on a map. Multiple monitors are just
+multiple viewports on the same canvas.
 
 ## Features
 
-<!-- TODO: small GIFs inline for highlights -->
+### Pan & zoom
 
-**Canvas & navigation**
+<!--
+  Video (~8s):
+  1. 3-finger swipe to pan across canvas with several windows
+  2. Pinch to zoom out, showing the full scattered layout
+  3. Pinch back in to zoom 1.0
+-->
 
-- Infinite 2D canvas with viewport panning, zoom, and scroll momentum
-- GPU-scaled zoom with cursor-anchored zoom (like Google Maps / Figma)
-- Window navigation: directional jump via cone search, MRU cycling (Alt-Tab), home toggle
-- Canvas anchors — save positions and jump between them (Mod+1-4)
-- Edge auto-pan when dragging windows near viewport edges
-- Magnetic window snapping during drag
+Infinite 2D canvas with viewport panning, zoom, and scroll momentum. A quick
+flick carries the viewport smoothly until friction stops it.
 
-<!-- TODO: GIF — zoom out to overview, then zoom back in -->
+| Input              | Action            | Context   |
+| ------------------ | ----------------- | --------- |
+| 3-finger swipe     | Pan viewport      | anywhere  |
+| Trackpad scroll    | Pan viewport      | on-canvas |
+| `Mod` + LMB drag   | Pan viewport      | anywhere  |
+| `Mod+Ctrl` + arrow | Pan viewport      | —         |
+| 2-finger pinch     | Zoom              | on-canvas |
+| 3-finger pinch     | Zoom              | anywhere  |
+| `Mod` + scroll     | Zoom at cursor    | anywhere  |
+| `Mod+=` / `Mod+-`  | Zoom in / out     | —         |
+| `Mod+0` / `Mod+Z`  | Reset zoom to 1.0 | —         |
 
-**Input**
+### Window navigation
 
-- Configurable trackpad gestures with context-awareness (on-window/on-canvas/anywhere)
-- Configurable mouse bindings with same context system
-- All keybindings configurable via TOML
-- XKB keyboard layout support with layout-independent binding matching
+<!--
+  Video (~8s):
+  1. 4-finger swipe right to jump to a window
+  2. 4-finger swipe up to jump to another
+  3. Alt-Tab to cycle back
+  4. 4-finger pinch-in to zoom-to-fit overview
+-->
 
-**Display**
+Jump to the nearest window in any direction via cone search. MRU cycling
+(`Alt-Tab`) with hold-to-commit. Zoom-to-fit shows all windows at once.
+Configurable anchors act as navigation targets for directional jumps even
+with no window there — useful for areas with pinned widgets.
 
-- Multi-monitor with independent viewports per output, hotplug, runtime output config (wlr-randr, wdisplays)
-- Viewport outlines showing where other monitors are looking on the canvas
-- GLSL shader backgrounds (or tiled images) that scroll with the viewport
-- Custom shaders for background — see [docs/shaders.md](docs/shaders.md)
+| Input                        | Action                                     |
+| ---------------------------- | ------------------------------------------ |
+| 4-finger swipe               | Jump to nearest window (natural direction) |
+| `Mod+Ctrl` + LMB drag        | Jump to nearest window (natural direction) |
+| `Mod` + arrow                | Jump to nearest window in direction        |
+| `Alt-Tab` / `Alt-Shift-Tab`  | Cycle windows (MRU)                        |
+| 4-finger pinch in / `Mod+W`  | Zoom-to-fit (overview)                     |
+| 4-finger pinch out / `Mod+A` | Home toggle (origin and back)              |
+| 4-finger hold / `Mod+C`      | Center focused window                      |
+| `Mod+1-4`                    | Jump to bookmarked canvas position         |
 
-<!-- TODO: GIF — frosted glass terminal with blur -->
+All 4-finger navigation gestures also work as `Mod` + 3-finger for smaller
+trackpads.
 
-**Window management**
+### Move, resize, maximize
 
-- Window blur and transparency via window rules (frosted-glass terminals)
-- Window rules: match by app_id/title glob, set position, size, widget mode, decoration, blur, opacity
-- Server-side decorations (title bar, shadows, resize borders) for non-CSD apps
-- XWayland support for X11 apps (Steam, Wine, JetBrains, etc.)
-- Click-to-focus model — no accidental focus changes while panning
+<!--
+  Video (~15s):
+  1. 3-finger doubletap-swipe to move a window — show it snapping to another window's edge
+  2. Drag window to viewport edge — show auto-pan kicking in
+  3. While still dragging, hit Mod+1 to jump to a bookmark — held window comes along
+  4. Alt+3-finger swipe to resize
+  5. Mod+M to fit-window (maximize), then Mod+M again to restore
+  6. Mod+F for fullscreen, Mod+F to exit
+-->
 
-**Ecosystem**
+Move windows by doubletap-swiping on them. Resize with `Alt` + 3-finger swipe.
+Windows snap to nearby edges magnetically during drag. Drag to the viewport
+edge and the canvas auto-pans — handy for rearranging windows just beyond the
+visible area.
 
-- Layer shell (waybar, fuzzel, mako) + foreign toplevel management
-- Session lock (swaylock), idle notify (swayidle), screencasting (OBS, Firefox)
-- 29 Wayland protocols
-- Runs nested (winit) for development or on real hardware (udev/DRM with libseat)
+**Tip:** while dragging a window, keyboard shortcuts still work. Use `Mod+1-4`
+to jump to a bookmark or `Mod+A` to go home — your held window comes with you.
+
+Fit-window (`Mod+M`) is the maximize analogue — centers the viewport, resets
+zoom to 1.0, and resizes the window to fill the screen. Toggle again to
+restore. Fullscreen (`Mod+F`) is a viewport mode, not a window state — any canvas
+action (launching an app, navigating) naturally exits it.
+
+| Input                         | Action                        |
+| ----------------------------- | ----------------------------- |
+| 3-finger doubletap-swipe      | Move window                   |
+| `Alt` + LMB drag              | Move window                   |
+| `Alt` + 3-finger swipe        | Resize window                 |
+| `Alt` + RMB drag              | Resize window                 |
+| `Alt` + MMB click / `Mod+M`   | Fit window (maximize/restore) |
+| `Alt` + 2-finger pinch-in/out | Fit window                    |
+| `Alt` + 3-finger pinch-in/out | Toggle fullscreen             |
+| `Mod` + MMB click / `Mod+F`   | Toggle fullscreen             |
+| `Mod+Shift` + arrow           | Nudge window 20px             |
+
+### Canvas background
+
+<!--
+  Video (~12s):
+  1. Pan across the canvas showing shader wallpaper scrolling with the viewport
+  2. Zoom out to show the background scales consistently with windows
+  3. Hot-reload config to cycle through several shaders and a tiled image
+-->
+
+The background is part of the canvas — it scrolls and zooms with the viewport,
+not stuck to the screen. This gives spatial awareness when panning.
+
+Two modes: **GLSL shaders** (default: dot grid, or write your own — see
+[docs/shaders.md](docs/shaders.md)) and **tiled images** (any PNG/JPG, tiled
+infinitely across the canvas). Both are infinite by nature.
+
+```toml
+[background]
+shader_path = "~/.config/driftwm/bg.glsl"    # custom shader
+# tile_path = "~/.config/driftwm/tile.png"   # or tiled image
+```
+
+### Window rules
+
+<!--
+  Video (~10s):
+  1. Show two frosted-glass terminals overlapping (blur on blur works)
+  2. Show notification panel with blur
+  3. Show borderless widgets pinned on the canvas (clock, stats)
+  4. Show a forced-SSD window with title bar
+-->
+
+Match windows by `app_id` and/or `title` (glob patterns) and control
+everything: position, size, decoration mode, blur, opacity, and widget
+behavior. All fields are independent and combine freely.
+
+**Widgets**: set `widget = true` to pin a window in place — immovable, below
+normal windows, excluded from Alt-Tab. Works for both regular windows and
+layer-shell surfaces (waybar). Use this for clocks, system stats, trays, or
+anything you want fixed on the canvas.
+
+```toml
+# Frosted-glass terminal
+[[window_rules]]
+app_id = "Alacritty"
+opacity = 0.85
+blur = true
+
+# Desktop widget — pinned, borderless
+[[window_rules]]
+app_id = "my-clock"
+position = [50, 50]
+widget = true
+decoration = "none"
+```
+
+Consistent rounded corners and drop shadows across all CSD and SSD windows.
+SSD fallback for X11/XWayland apps — minimal title bar, close button,
+double-tap to maximize.
+
+### Multi-monitor
+
+<!--
+  Video (~10s, two monitors):
+  1. Pan on one monitor, show the other monitor's outline moving on canvas
+  2. Zoom out on one monitor to a different zoom level than the other
+  3. Drag a window across the monitor boundary — it teleports to the other viewport
+  4. Mod+Alt+Arrow to send a window to the other output
+-->
+
+Multiple monitors are independent viewports on the same canvas — different
+zoom levels, overlapping views. An outline on each monitor shows where the
+other monitors' viewports are. Cursor crosses between monitors freely; dragged
+windows teleport to the target viewport's canvas position. Hotplug just works.
+
+| Input             | Action                         |
+| ----------------- | ------------------------------ |
+| `Mod+Alt` + arrow | Send window to adjacent output |
+
+### Panels, docks & taskbars
+
+<!--
+  Video (~8s):
+  1. Show waybar at top, click a window entry — viewport pans to it
+  2. Show fuzzel launcher opening an app
+  3. Show fuzzel window-search script — search open windows, select one, viewport navigates to it
+-->
+
+Layer shell surfaces (waybar, fuzzel, mako) work as expected. Foreign toplevel
+management means your dock/taskbar shows all windows — click one and the
+viewport pans to it and centers it. See [`extras/`](extras/) for a fuzzel
+window-search script that lets you search and jump to any open window.
+
+### Everything else
+
+- XWayland for X11 apps (Steam, Wine, JetBrains, etc.)
+- Session lock (swaylock), idle notify (swayidle/hypridle)
+- Screencasting (OBS, Firefox via xdg-desktop-portal)
+- Screenshots (grim + slurp)
+- Click-to-focus — no accidental focus changes while panning
+- Layout-independent keybindings (physical key position across keyboard layouts)
+- 30 Wayland protocols
+- All bindings (keyboard, mouse, gesture) fully configurable via TOML
+- Context-aware input: mouse/trackpad bindings can differ on-window vs on-canvas vs anywhere
 
 ## Install
 
@@ -117,24 +257,26 @@ cargo run -- --backend udev
 
 ## Quick start
 
-`mod` is Super by default (configurable via `mod_key`).
+`mod` is Super by default (configurable via `mod_key`). Terminal and launcher
+are auto-detected (foot/alacritty/kitty, fuzzel/wofi/bemenu).
 
-| Shortcut           | Action                              |
-| ------------------ | ----------------------------------- |
-| `mod+return`       | Open terminal                       |
-| `mod+d`            | Open launcher                       |
-| `mod+q`            | Close window                        |
-| `mod+f`            | Toggle fullscreen                   |
-| `mod+c`            | Center focused window               |
-| `mod+arrow`        | Jump to nearest window in direction |
-| `mod+a`            | Home toggle (origin and back)       |
-| `mod+w`            | Zoom-to-fit (overview)              |
-| `mod+scroll`       | Zoom at cursor                      |
-| `alt+tab`          | Cycle windows                       |
-| `mod+l`            | Lock screen                         |
-| `mod+ctrl+shift+q` | Quit compositor                     |
+| Shortcut           | Action                        |
+| ------------------ | ----------------------------- |
+| `mod+return`       | Open terminal                 |
+| `mod+d`            | Open launcher                 |
+| `mod+q`            | Close window                  |
+| `mod+m`            | Fit window (maximize/restore) |
+| `mod+f`            | Toggle fullscreen             |
+| `mod+c`            | Center focused window         |
+| `mod+arrow`        | Jump to nearest window        |
+| `mod+a`            | Home toggle                   |
+| `mod+w`            | Zoom-to-fit (overview)        |
+| `mod+=` / `mod+-`  | Zoom in / out                 |
+| `mod+scroll`       | Zoom at cursor                |
+| `alt+tab`          | Cycle windows                 |
+| `mod+l`            | Lock screen                   |
+| `mod+ctrl+shift+q` | Quit                          |
 
-Terminal and launcher are auto-detected (foot/alacritty/kitty, fuzzel/wofi/bemenu).
 All keybindings are configurable — see [`config.example.toml`](config.example.toml).
 
 ## Configuration

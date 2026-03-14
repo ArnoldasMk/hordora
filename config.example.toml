@@ -46,9 +46,9 @@
 # animation_speed = 0.3       # camera lerp factor (higher = faster)
 # nudge_step = 20             # px per nudge-window action
 # pan_step = 100.0            # px per pan-viewport action
-# Canvas points reachable via directional navigation (Mod+Arrow).
-# Uses same coordinate system as go_to_position (Y-up).
-# Default: [[0, 0]] (home).
+# Anchors: canvas points discoverable by center-nearest (4-finger swipe / Mod+Arrow)
+# even when no window is there. Uses Y-up coordinate system.
+# Default: [[0, 0]] (home only).
 # anchors = [[0, 0], [-1750, 1750], [1750, 1750], [1750, -1750], [-1750, -1750]]
 
 [navigation.edge_pan]
@@ -105,10 +105,10 @@
 #   home-toggle             — toggle between current position and origin
 #   zoom-in / zoom-out      — step zoom
 #   zoom-reset              — zoom to 1.0
-#   go-to <x> <y>           — jump camera to canvas position (Y-up)
+#   go-to <x> <y>           — jump camera to canvas position (bookmarks, Y-up)
 #   zoom-to-fit             — fit all windows in viewport
 #   toggle-fullscreen       — toggle focused window fullscreen
-#   fit-window              — toggle fit window to viewport (maximize/restore)
+#   fit-window              — toggle maximize: centers + resets zoom + fills viewport; restore only resizes back
 #   reload-config           — hot-reload config file
 #   quit                    — exit the compositor
 #   send-to-output <dir>    — move focused window to adjacent output
