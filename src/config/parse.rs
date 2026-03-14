@@ -141,6 +141,7 @@ pub fn parse_mouse_action(s: &str) -> Result<MouseAction, String> {
         "zoom" => Ok(MouseAction::Zoom),
         "center-nearest" => Ok(MouseAction::CenterNearest),
         "toggle-fullscreen" => Ok(MouseAction::ToggleFullscreen),
+        "fit-window" => Ok(MouseAction::FitWindow),
         other => Err(format!("unknown mouse action: {other}")),
     }
 }

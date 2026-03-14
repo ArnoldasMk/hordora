@@ -385,6 +385,8 @@ impl DriftWm {
             Action::ToggleFullscreen => {
                 if self.is_fullscreen() {
                     self.exit_fullscreen();
+                } else if was_fullscreen.is_some() {
+                    // Gesture already exited fullscreen — don't re-enter
                 } else {
                     let keyboard = self.seat.get_keyboard().unwrap();
                     if let Some(focus) = keyboard.current_focus() {

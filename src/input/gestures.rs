@@ -72,9 +72,6 @@ pub enum GestureState {
     HoldAction { action: Action },
 }
 
-const SWIPE_THRESHOLD_SQ: f64 = 16.0 * 16.0;
-const PINCH_SCALE_LO: f64 = 0.8;
-const PINCH_SCALE_HI: f64 = 1.2;
 
 pub(crate) const DOUBLE_TAP_WINDOW_MS: u64 = 300;
 
@@ -416,7 +413,7 @@ impl DriftWm {
                 }
                 *cumulative += Point::from((-delta.x, -delta.y));
                 let mag_sq = cumulative.x.powi(2) + cumulative.y.powi(2);
-                if mag_sq >= SWIPE_THRESHOLD_SQ {
+                if mag_sq >= self.config.gesture_thresholds.swipe_distance.powi(2) {
                     *fired = true;
                     let action = if cumulative.y.abs() > cumulative.x.abs() {
                         if cumulative.y < 0.0 { up.clone() } else { down.clone() }
@@ -608,10 +605,10 @@ impl DriftWm {
                 self.forward_pinch_update(delta, scale, rotation, time);
             }
             GestureState::PinchThreshold { fired_in, fired_out, action_in, action_out } => {
-                let to_exec = if !*fired_in && scale < PINCH_SCALE_LO {
+                let to_exec = if !*fired_in && scale < self.config.gesture_thresholds.pinch_in_scale {
                     *fired_in = true;
                     action_in.clone()
-                } else if !*fired_out && scale > PINCH_SCALE_HI {
+                } else if !*fired_out && scale > self.config.gesture_thresholds.pinch_out_scale {
                     *fired_out = true;
                     action_out.clone()
                 } else {

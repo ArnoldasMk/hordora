@@ -101,7 +101,7 @@ impl DriftWm {
             if self.is_fullscreen() {
                 // In fullscreen the window fills the screen — treat as OnWindow
                 let fs_lookup = self.config.mouse_button_lookup_ctx(&mods, button, BindingContext::OnWindow);
-                if matches!(fs_lookup, Some(MouseAction::ToggleFullscreen)) {
+                if matches!(fs_lookup, Some(MouseAction::ToggleFullscreen) | Some(MouseAction::FitWindow)) {
                     self.exit_fullscreen_remap_pointer(pos);
                     return;
                 } else if fs_lookup.is_some() {
@@ -280,6 +280,15 @@ impl DriftWm {
                         {
                             self.raise_and_focus(&window, serial);
                             self.execute_action(&config::Action::ToggleFullscreen);
+                            return;
+                        }
+                    }
+                    MouseAction::FitWindow => {
+                        if let Some((window, _)) =
+                            self.space.element_under(pos).map(|(w, l)| (w.clone(), l))
+                        {
+                            self.raise_and_focus(&window, serial);
+                            self.execute_action(&config::Action::FitWindow);
                             return;
                         }
                     }

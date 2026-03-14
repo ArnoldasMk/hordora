@@ -168,6 +168,9 @@ pub(super) struct MouseFileConfig {
 #[derive(Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
 pub(super) struct GestureFileConfig {
+    pub swipe_threshold: Option<f64>,
+    pub pinch_in_threshold: Option<f64>,
+    pub pinch_out_threshold: Option<f64>,
     #[serde(rename = "on-window")]
     pub on_window: Option<HashMap<String, String>>,
     #[serde(rename = "on-canvas")]

@@ -211,6 +211,7 @@ pub enum MouseAction {
     Zoom,
     CenterNearest,
     ToggleFullscreen,
+    FitWindow,
 }
 
 // ── Gesture types ────────────────────────────────────────────────────
@@ -316,6 +317,23 @@ impl Default for TrackpadSettings {
             natural_scroll: true,
             tap_and_drag: true,
             accel_speed: 0.0,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GestureThresholds {
+    pub swipe_distance: f64,
+    pub pinch_in_scale: f64,
+    pub pinch_out_scale: f64,
+}
+
+impl Default for GestureThresholds {
+    fn default() -> Self {
+        Self {
+            swipe_distance: 12.0,
+            pinch_in_scale: 0.85,
+            pinch_out_scale: 1.15,
         }
     }
 }

@@ -168,12 +168,13 @@
 # Triggers: left, right, middle (buttons), trackpad-scroll, wheel-scroll
 # Merges with defaults. Use "none" to unbind.
 #
-# Mouse actions: move-window, resize-window, pan-viewport, zoom, center-nearest, toggle-fullscreen
+# Mouse actions: move-window, resize-window, pan-viewport, zoom, center-nearest, toggle-fullscreen, fit-window
 
 [mouse.on-window]
 # "alt+left" = "move-window"
 # "alt+right" = "resize-window"
-# "alt+middle" = "toggle-fullscreen"
+# "alt+middle" = "fit-window"
+# "mod+middle" = "toggle-fullscreen"
 
 [mouse.on-canvas]
 # "left" = "pan-viewport"            # unmodified left-click on empty canvas → pan
@@ -202,9 +203,18 @@
 # Continuous actions: pan-viewport, zoom, move-window, resize-window
 # Threshold actions: center-nearest, center-window, home-toggle, zoom-to-fit, fit-window, exec <cmd>, etc.
 
+# Gesture thresholds — tune for your touchpad size.
+# swipe_threshold = 12.0        # px cumulative distance before directional swipe fires
+# pinch_in_threshold = 0.85     # scale below which pinch-in fires (1.0 = no pinch)
+# pinch_out_threshold = 1.15    # scale above which pinch-out fires (1.0 = no pinch)
+
 [gestures.on-window]
 # "alt+3-finger-swipe" = "resize-window"
 # "3-finger-doubletap-swipe" = "move-window"
+# "alt+2-finger-pinch-in" = "fit-window"
+# "alt+2-finger-pinch-out" = "fit-window"
+# "alt+3-finger-pinch-in" = "toggle-fullscreen"
+# "alt+3-finger-pinch-out" = "toggle-fullscreen"
 
 [gestures.on-canvas]
 # "2-finger-pinch" = "zoom"
@@ -213,9 +223,9 @@
 # "3-finger-swipe" = "pan-viewport"         # continuous (per-frame dx/dy)
 # "4-finger-swipe" = "center-nearest"       # threshold (accumulate, detect direction, fire once)
 # "mod+3-finger-swipe" = "center-nearest"   # mod makes 3-finger swipe navigate too
-# Per-direction overrides (threshold only, checked before swipe fallback):
-# "4-finger-swipe-up" = "exec brightnessctl set +5%"
-# "4-finger-swipe-down" = "exec brightnessctl set 5%-"
+# Per-direction overrides examples (threshold only, checked before swipe fallback):
+# # "4-finger-swipe-up" = "exec brightnessctl set +5%"
+# # "4-finger-swipe-down" = "exec brightnessctl set 5%-"
 # "mod+2-finger-pinch" = "zoom"             # mod overrides app forwarding
 # "3-finger-pinch" = "zoom"                 # continuous
 # "4-finger-pinch-in" = "zoom-to-fit"       # threshold

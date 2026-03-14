@@ -66,6 +66,7 @@ pub struct Config {
     pub snap_break_force: f64,
     pub background: BackgroundConfig,
     pub trackpad: TrackpadSettings,
+    pub gesture_thresholds: GestureThresholds,
     pub layout_independent: bool,
     pub keyboard_layout: KeyboardLayout,
     pub autostart: Vec<String>,
@@ -329,6 +330,12 @@ impl Config {
             }
         };
 
+        let gesture_thresholds = GestureThresholds {
+            swipe_distance: raw.gestures.swipe_threshold.unwrap_or(12.0),
+            pinch_in_scale: raw.gestures.pinch_in_threshold.unwrap_or(0.85),
+            pinch_out_scale: raw.gestures.pinch_out_threshold.unwrap_or(1.15),
+        };
+
         let keyboard_layout = {
             let k = &raw.input.keyboard;
             KeyboardLayout {
@@ -394,6 +401,7 @@ impl Config {
             decorations,
             effects,
             trackpad,
+            gesture_thresholds,
             layout_independent: raw.input.keyboard.layout_independent.unwrap_or(true),
             keyboard_layout,
             cursor_theme: raw.cursor.theme,

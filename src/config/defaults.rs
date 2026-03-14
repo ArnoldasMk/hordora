@@ -343,6 +343,13 @@ pub(super) fn default_mouse_bindings(mod_key: ModKey) -> ContextBindings<MouseBi
                 modifiers: alt_only.clone(),
                 trigger: MouseTrigger::Button(BTN_MIDDLE),
             },
+            MouseAction::FitWindow,
+        ),
+        (
+            MouseBinding {
+                modifiers: m.clone(),
+                trigger: MouseTrigger::Button(BTN_MIDDLE),
+            },
             MouseAction::ToggleFullscreen,
         ),
     ]);
@@ -419,7 +426,7 @@ pub(super) fn default_gesture_bindings(mod_key: ModKey) -> ContextBindings<Gestu
     let on_window = HashMap::from([
         (
             GestureBinding {
-                modifiers: alt_only,
+                modifiers: alt_only.clone(),
                 trigger: GestureTrigger::Swipe { fingers: 3 },
             },
             GestureConfigEntry::Continuous(ContinuousAction::ResizeWindow),
@@ -430,6 +437,34 @@ pub(super) fn default_gesture_bindings(mod_key: ModKey) -> ContextBindings<Gestu
                 trigger: GestureTrigger::DoubletapSwipe { fingers: 3 },
             },
             GestureConfigEntry::Continuous(ContinuousAction::MoveWindow),
+        ),
+        (
+            GestureBinding {
+                modifiers: alt_only.clone(),
+                trigger: GestureTrigger::PinchIn { fingers: 2 },
+            },
+            GestureConfigEntry::Threshold(ThresholdAction::Fixed(Action::FitWindow)),
+        ),
+        (
+            GestureBinding {
+                modifiers: alt_only.clone(),
+                trigger: GestureTrigger::PinchOut { fingers: 2 },
+            },
+            GestureConfigEntry::Threshold(ThresholdAction::Fixed(Action::FitWindow)),
+        ),
+        (
+            GestureBinding {
+                modifiers: alt_only.clone(),
+                trigger: GestureTrigger::PinchIn { fingers: 3 },
+            },
+            GestureConfigEntry::Threshold(ThresholdAction::Fixed(Action::ToggleFullscreen)),
+        ),
+        (
+            GestureBinding {
+                modifiers: alt_only,
+                trigger: GestureTrigger::PinchOut { fingers: 3 },
+            },
+            GestureConfigEntry::Threshold(ThresholdAction::Fixed(Action::ToggleFullscreen)),
         ),
     ]);
 
