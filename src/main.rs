@@ -19,6 +19,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("driftwm {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     // --check-config: validate config and exit
     if std::env::args().any(|a| a == "--check-config") {
         let _config = driftwm::config::Config::load();

@@ -184,36 +184,37 @@ window-search script that lets you search and jump to any open window.
 
 ## Install
 
-### Quick install (prebuilt binary)
+### Fedora (prebuilt binary)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/malbiruk/driftwm/main/install.sh | sudo sh
 ```
 
-Downloads the latest release, installs the binary, session wrapper, desktop
-entry, and shader wallpapers. Checks for required runtime libraries and
-tells you what to install if anything is missing.
+Installs the binary, session wrapper, desktop entry, and shader wallpapers.
+Checks for required runtime libraries and tells you what to install if
+anything is missing. To uninstall, run with `sudo sh -s uninstall`.
 
-To uninstall: `curl -fsSL https://raw.githubusercontent.com/malbiruk/driftwm/main/install.sh | sudo sh -s uninstall`
+### Arch Linux (AUR)
+
+```bash
+yay -S driftwm
+```
 
 ### Build from source
 
 Requires Rust 1.85+ (edition 2024).
 
 **Fedora:**
-
 ```bash
 sudo dnf install libseat-devel libdisplay-info-devel libinput-devel mesa-libgbm-devel libxkbcommon-devel
 ```
 
 **Ubuntu/Debian:**
-
 ```bash
 sudo apt install libseat-dev libdisplay-info-dev libinput-dev libudev-dev libgbm-dev libxkbcommon-dev libwayland-dev
 ```
 
 **Arch Linux:**
-
 ```bash
 sudo pacman -S libdisplay-info libinput seatd mesa libxkbcommon
 ```
