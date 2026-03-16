@@ -34,6 +34,22 @@ Use `RUST_LOG=debug cargo run` for smithay/libinput event traces.
 
 Udev backend build deps (Fedora): `libseat-devel libdisplay-info-devel libinput-devel mesa-libgbm-devel`.
 
+### Cross-distro build testing (containers)
+
+Use podman to test builds on other distros (Docker Desktop is flaky on Fedora):
+
+```bash
+# Arch Linux
+podman run --rm -it --security-opt label=disable -v ~/Documents/work/scripts/driftwm:/src archlinux:latest bash
+pacman -Syu --noconfirm rust cargo pkg-config libdisplay-info libinput seatd mesa libxkbcommon
+cd /src && cargo build
+```
+
+Notes:
+- `--security-opt label=disable` is required on Fedora (SELinux blocks libc inside container otherwise).
+- Use `cargo build` (not `--release`) for faster dep checking — release optimizations are slow and unnecessary for verifying deps.
+- Don't copy the repo inside the container — `target/` is huge. Mount directly without `:ro` so cargo can write to `target/`.
+
 ## Architecture
 
 The compositor uses a **camera/viewport** model: the screen is a viewport onto an infinite 2D plane. Each window has absolute `(x, y)` canvas coordinates. The viewport has a camera `(cx, cy)` and zoom `z`. Screen position = `(wx - cx) * z`. Multiple monitors = multiple independent viewports on the same canvas.

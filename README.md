@@ -122,7 +122,7 @@ behavior. All fields are independent and combine freely.
 
 **Widgets**: set `widget = true` to pin a window in place — immovable, below
 normal windows, excluded from Alt-Tab. Works for both regular windows and
-layer-shell surfaces (waybar). Use this for clocks, system stats, trays, or
+layer-shell surfaces (e.g. waybar). Use this for clocks, system stats, trays, or
 anything you want fixed on the canvas.
 
 ```toml
@@ -179,42 +179,57 @@ window-search script that lets you search and jump to any open window.
 - Screencasting (OBS, Firefox via xdg-desktop-portal)
 - Screenshots (grim + slurp)
 - Click-to-focus — no accidental focus changes while panning
-- Layout-independent keybindings (physical key position across keyboard layouts)
-- 30 Wayland protocols
 - All bindings (keyboard, mouse, gesture) fully configurable via TOML
-- Context-aware input: mouse/trackpad bindings can differ on-window vs on-canvas vs anywhere
+- 30 Wayland protocols
 
 ## Install
 
-Requires Rust (edition 2024) and system libraries.
-
-**Fedora:**
+### Quick install (prebuilt binary)
 
 ```bash
-sudo dnf install libseat-devel libdisplay-info-devel libinput-devel mesa-libgbm-devel
+curl -fsSL https://raw.githubusercontent.com/malbiruk/driftwm/main/install.sh | sudo sh
+```
+
+Downloads the latest release, installs the binary, session wrapper, desktop
+entry, and shader wallpapers. Checks for required runtime libraries and
+tells you what to install if anything is missing.
+
+To uninstall: `curl -fsSL https://raw.githubusercontent.com/malbiruk/driftwm/main/install.sh | sudo sh -s uninstall`
+
+### Build from source
+
+Requires Rust 1.85+ (edition 2024).
+
+**Fedora:**
+```bash
+sudo dnf install libseat-devel libdisplay-info-devel libinput-devel mesa-libgbm-devel libxkbcommon-devel
 ```
 
 **Ubuntu/Debian:**
-
 ```bash
-sudo apt install libseat-dev libdisplay-info-dev libinput-dev libudev-dev
+sudo apt install libseat-dev libdisplay-info-dev libinput-dev libudev-dev libgbm-dev libxkbcommon-dev libwayland-dev
 ```
 
+**Arch Linux:**
 ```bash
-git clone https://github.com/user/driftwm.git  # TODO: real URL
+sudo pacman -S libdisplay-info libinput seatd mesa libxkbcommon
+```
+
+> **Note:** Ubuntu 24.04 ships Rust 1.75 which is too old. Install via
+> [rustup](https://rustup.rs/) instead of `apt install rustc`.
+
+```bash
+git clone https://github.com/malbiruk/driftwm.git
 cd driftwm
 cargo build --release
+sudo make install
 ```
 
 ### Running
 
-```bash
-# Nested in an existing Wayland session (for trying it out):
-cargo run
-
-# On real hardware (from a TTY):
-cargo run -- --backend udev
-```
+driftwm auto-detects whether it's running nested (inside an existing Wayland
+session) or on real hardware (from a TTY). Just run `driftwm`. For display
+manager integration, select "driftwm" from the session menu.
 
 ## Quick start
 
