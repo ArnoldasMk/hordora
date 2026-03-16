@@ -45,7 +45,7 @@ flick carries the viewport smoothly until friction stops it.
 
 ### Window navigation
 
-https://github.com/user-attachments/assets/a3f438e0-1798-49c5-a645-6717a1cd9f99
+https://github.com/user-attachments/assets/5b7d89cd-b065-4309-ae74-30bfe68a8abb
 
 Jump to the nearest window in any direction via cone search. MRU cycling
 (`Alt-Tab`) with hold-to-commit. Zoom-to-fit shows all windows at once.
@@ -114,7 +114,7 @@ shader_path = "~/.config/driftwm/bg.glsl"    # custom shader
 
 ### Window rules
 
-https://github.com/user-attachments/assets/16404327-9226-48a4-8443-23917b6c849b
+https://github.com/user-attachments/assets/af603001-9f08-4d42-b50a-0342d06e954b
 
 Match windows by `app_id` and/or `title` (glob patterns) and control
 everything: position, size, decoration mode, blur, opacity, and widget
@@ -165,7 +165,7 @@ windows teleport to the target viewport's canvas position. Hotplug just works.
 
 ### Panels, docks & taskbars
 
-https://github.com/user-attachments/assets/6216cc20-e995-4688-b988-21bff687dc0f
+https://github.com/user-attachments/assets/83c2ad30-fbfa-4cf2-aa47-905826889dcb
 
 Layer shell surfaces (waybar, fuzzel, mako) work as expected. Foreign toplevel
 management means your dock/taskbar shows all windows — click one and the
