@@ -11,7 +11,7 @@ Traditional window managers arrange windows to fit your screen. driftwm flips th
 
 Built on [smithay](https://github.com/Smithay/smithay). Inspired by [vxwm](https://codeberg.org/wh1tepearl/vxwm), [hevel](https://git.sr.ht/~dlm/hevel), and [niri](https://github.com/YaLTeR/niri).
 
-**WARNING:** This is experimental software. Use at your own risk.
+**WARNING:** This is experimental software. Primarily built with AI. Use at your own risk.
 
 ## Concept
 
