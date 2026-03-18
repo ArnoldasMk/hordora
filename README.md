@@ -202,6 +202,35 @@ anything is missing. To uninstall, run with `sudo sh -s uninstall`.
 yay -S driftwm
 ```
 
+### NixOS / Nix
+
+A `flake.nix` is included. To build:
+
+```bash
+nix build
+```
+
+For development (provides native deps, uses your system Rust):
+
+```bash
+nix develop
+cargo build
+cargo run
+```
+
+To add driftwm as a session in your NixOS config:
+
+```nix
+let
+  driftwm-flake = builtins.getFlake "github:malbiruk/driftwm";
+  driftwm = driftwm-flake.packages.x86_64-linux.default;
+in
+{
+  services.displayManager.sessionPackages = [ driftwm ];
+  environment.systemPackages = [ driftwm ];
+}
+```
+
 ### Build from source
 
 Requires Rust 1.85+ (edition 2024).
