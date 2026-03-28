@@ -177,7 +177,7 @@ window-search script that lets you search and jump to any open window.
 
 - XWayland for X11 apps (Steam, Wine, JetBrains, etc.)
 - Session lock (swaylock), idle notify (swayidle/hypridle)
-- Screencasting (OBS, Firefox via xdg-desktop-portal)
+- Screencasting (OBS, Firefox, Discord — requires `xdg-desktop-portal` + `xdg-desktop-portal-wlr`)
 - Screenshots (grim + slurp)
 - Click-to-focus (default) or focus-follows-mouse (sloppy focus)
 - All bindings (keyboard, mouse, gesture) fully configurable via TOML
