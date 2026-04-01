@@ -84,7 +84,7 @@ impl CompositorHandler for DriftWm {
                 })
             };
             if is_scene_surface {
-                self.blur_scene_generation += 1;
+                self.render.blur_scene_generation += 1;
             }
         }
 

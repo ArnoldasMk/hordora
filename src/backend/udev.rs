@@ -382,12 +382,12 @@ pub fn init_udev(
     // Uses first surface's mode for initial background element size (resized per-frame anyway)
     {
         let mut backend = data.backend.take().unwrap();
-        data.shadow_shader = crate::render::compile_shadow_shader(backend.renderer());
-        data.corner_clip_shader = crate::render::compile_corner_clip_shader(backend.renderer());
+        data.render.shadow_shader = crate::render::compile_shadow_shader(backend.renderer());
+        data.render.corner_clip_shader = crate::render::compile_corner_clip_shader(backend.renderer());
         let (blur_down, blur_up, blur_mask) = crate::render::compile_blur_shaders(backend.renderer());
-        data.blur_down_shader = blur_down;
-        data.blur_up_shader = blur_up;
-        data.blur_mask_shader = blur_mask;
+        data.render.blur_down_shader = blur_down;
+        data.render.blur_up_shader = blur_up;
+        data.render.blur_mask_shader = blur_mask;
         data.backend = Some(backend);
     }
 
@@ -493,7 +493,7 @@ pub fn init_udev(
                                         .collect();
                                     for old in &virtual_outputs {
                                         data.space.unmap_output(old);
-                                        data.cached_bg_elements.remove(&old.name());
+                                        data.render.cached_bg_elements.remove(&old.name());
                                         data.remove_capture_state(&old.name());
                                     }
                                     data.disconnected_outputs.clear();
@@ -552,7 +552,7 @@ pub fn init_udev(
                                         );
                                         data.disconnected_outputs.insert(surface.output.name());
                                         data.exit_fullscreen_on(&surface.output);
-                                        data.cached_bg_elements.remove(&surface.output.name());
+                                        data.render.cached_bg_elements.remove(&surface.output.name());
                                         data.remove_capture_state(&surface.output.name());
                                         data.lock_surfaces.remove(&surface.output);
                                     } else {
@@ -589,7 +589,7 @@ pub fn init_udev(
                                         }
 
                                         // Clean up per-output resources
-                                        data.cached_bg_elements.remove(&surface.output.name());
+                                        data.render.cached_bg_elements.remove(&surface.output.name());
                                         data.remove_capture_state(&surface.output.name());
                                         data.fullscreen.remove(&surface.output);
                                         data.lock_surfaces.remove(&surface.output);

@@ -2,6 +2,8 @@ mod animation;
 pub mod fit;
 mod fullscreen;
 mod navigation;
+mod render_cache;
+pub use render_cache::RenderCache;
 
 use smithay::{
     desktop::{PopupManager, Space, Window},
@@ -33,9 +35,7 @@ use std::time::Instant;
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::renderer::damage::OutputDamageTracker;
 use smithay::backend::renderer::element::memory::MemoryRenderBuffer;
-use smithay::backend::renderer::gles::{
-    GlesPixelProgram, GlesTexProgram, GlesTexture, element::PixelShaderElement,
-};
+use smithay::backend::renderer::gles::GlesTexture;
 use smithay::utils::{Physical, Transform};
 use smithay::wayland::content_type::ContentTypeState;
 use smithay::wayland::dmabuf::{DmabufGlobal, DmabufState};
@@ -294,43 +294,8 @@ pub struct DriftWm {
         crate::decorations::WindowDecoration,
     >,
     pub pending_ssd: HashSet<smithay::reexports::wayland_server::backend::ObjectId>,
-    // -- global: shaders (compiled once, shared across outputs) --
-    pub shadow_shader: Option<GlesPixelProgram>,
-    pub corner_clip_shader: Option<GlesTexProgram>,
-    pub background_shader: Option<GlesPixelProgram>,
-    // -- global: blur shaders + per-window texture cache --
-    pub blur_down_shader: Option<GlesTexProgram>,
-    pub blur_up_shader: Option<GlesTexProgram>,
-    pub blur_mask_shader: Option<GlesTexProgram>,
-    pub blur_cache:
-        HashMap<smithay::reexports::wayland_server::backend::ObjectId, crate::render::BlurCache>,
-    /// Cached full-output FBO for blur behind-content rendering — reused if output size matches.
-    pub blur_bg_fbo: Option<(
-        smithay::backend::renderer::gles::GlesTexture,
-        Size<i32, smithay::utils::Physical>,
-    )>,
-    /// Generation counter for blur cache invalidation — bumped on scene-affecting changes.
-    pub blur_scene_generation: u64,
-    /// Structural generation — bumped on move/z-order changes.
-    pub blur_geometry_generation: u64,
-    /// Camera generation — bumped on camera/viewport changes only.
-    /// Layer surfaces need recompute on camera changes (screen-fixed, canvas scrolls behind them),
-    /// but canvas windows don't (same canvas content behind them regardless of camera).
-    pub blur_camera_generation: u64,
-    // -- global: cached CSD shadows (for corner-clipped CSD windows) --
-    pub csd_shadows: HashMap<
-        smithay::reexports::wayland_server::backend::ObjectId,
-        (PixelShaderElement, (i32, i32)),
-    >,
-    // -- per-output: cached render elements (!Send, stays on DriftWm) --
-    pub cached_bg_elements: HashMap<String, PixelShaderElement>,
-    // -- per-output: persistent capture state for screen recording --
-    // Keys are prefixed by protocol: "sc:{output}" for wlr-screencopy,
-    // "cap:{output}" for ext-image-copy-capture (different transforms).
-    pub capture_state: HashMap<String, CaptureOutputState>,
-    // -- global: background tile shader + per-output cached elements --
-    pub tile_shader: Option<GlesTexProgram>,
-    pub cached_tile_bg: HashMap<String, crate::render::TileShaderElement>,
+    // -- global: render state (shaders, blur, backgrounds, captures) --
+    pub render: RenderCache,
 
     // -- global: protocol state (held for smithay delegate macros) --
     pub dmabuf_state: DmabufState,
@@ -586,22 +551,7 @@ impl DriftWm {
             backend: None,
             decorations: HashMap::new(),
             pending_ssd: HashSet::new(),
-            shadow_shader: None,
-            corner_clip_shader: None,
-            background_shader: None,
-            blur_down_shader: None,
-            blur_up_shader: None,
-            blur_mask_shader: None,
-            blur_cache: HashMap::new(),
-            blur_bg_fbo: None,
-            blur_scene_generation: 0,
-            blur_geometry_generation: 0,
-            blur_camera_generation: 0,
-            csd_shadows: HashMap::new(),
-            cached_bg_elements: HashMap::new(),
-            capture_state: HashMap::new(),
-            tile_shader: None,
-            cached_tile_bg: HashMap::new(),
+            render: RenderCache::new(),
             dmabuf_state: DmabufState::new(),
             dmabuf_global: None,
             cursor_shape_state,
@@ -674,8 +624,8 @@ impl DriftWm {
     /// Push any `below` windows to the bottom of the z-order.
     /// Called after every `raise_element()` to maintain stacking.
     pub fn enforce_below_windows(&mut self) {
-        self.blur_scene_generation += 1;
-        self.blur_geometry_generation += 1;
+        self.render.blur_scene_generation += 1;
+        self.render.blur_geometry_generation += 1;
         // Space stores elements in a vec where last = topmost.
         // raise_element pushes to the end (top). So we raise all
         // non-below windows in reverse order to preserve their relative
@@ -880,11 +830,8 @@ impl DriftWm {
         self.redraws_needed.extend(self.active_crtcs.iter());
     }
 
-    /// Remove all capture state entries for a given output name.
-    /// Keys are prefixed ("sc:{name}", "cap:{name}") so we retain non-matching.
     pub fn remove_capture_state(&mut self, output_name: &str) {
-        self.capture_state
-            .retain(|k, _| !k.ends_with(&format!(":{output_name}")));
+        self.render.remove_capture_state(output_name);
     }
 
     /// True if the current cursor is an animated xcursor (multiple frames with delays).
@@ -1181,7 +1128,7 @@ impl DriftWm {
             self.space.map_output(&output, cam);
         }
         if changed {
-            self.blur_camera_generation += 1;
+            self.render.blur_camera_generation += 1;
         }
     }
 
@@ -1466,10 +1413,10 @@ impl DriftWm {
 
         // Background shader/tile — always clear cached state so that editing
         // the shader file on disk takes effect after `touch`ing the config.
-        self.background_shader = None;
-        self.cached_bg_elements.clear();
-        self.tile_shader = None;
-        self.cached_tile_bg.clear();
+        self.render.background_shader = None;
+        self.render.cached_bg_elements.clear();
+        self.render.tile_shader = None;
+        self.render.cached_tile_bg.clear();
 
         // Cursor theme/size — validate theme before committing
         let theme_changed = new_config.cursor_theme != self.config.cursor_theme;

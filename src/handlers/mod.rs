@@ -408,7 +408,7 @@ impl XdgDecorationHandler for DriftWm {
         } else {
             self.pending_ssd.remove(&wl_surface.id());
             self.decorations.remove(&wl_surface.id());
-            self.csd_shadows.remove(&wl_surface.id());
+            self.render.csd_shadows.remove(&wl_surface.id());
         }
     }
 
@@ -562,7 +562,7 @@ impl OutputManagementHandler for DriftWm {
 
             output.change_current_state(current_mode, new_transform, new_scale, new_position);
 
-            self.cached_bg_elements.remove(&cfg.output_name);
+            self.render.cached_bg_elements.remove(&cfg.output_name);
             self.remove_capture_state(&cfg.output_name);
         }
         self.mark_all_dirty();

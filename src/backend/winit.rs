@@ -65,12 +65,12 @@ pub fn init_winit(
     {
         let mut backend = data.backend.take().unwrap();
         crate::render::init_background(data, backend.renderer(), size.to_logical(1), "winit");
-        data.shadow_shader = crate::render::compile_shadow_shader(backend.renderer());
-        data.corner_clip_shader = crate::render::compile_corner_clip_shader(backend.renderer());
+        data.render.shadow_shader = crate::render::compile_shadow_shader(backend.renderer());
+        data.render.corner_clip_shader = crate::render::compile_corner_clip_shader(backend.renderer());
         let (blur_down, blur_up, blur_mask) = crate::render::compile_blur_shaders(backend.renderer());
-        data.blur_down_shader = blur_down;
-        data.blur_up_shader = blur_up;
-        data.blur_mask_shader = blur_mask;
+        data.render.blur_down_shader = blur_down;
+        data.render.blur_up_shader = blur_up;
+        data.render.blur_mask_shader = blur_mask;
         data.backend = Some(backend);
     }
 
@@ -201,7 +201,7 @@ pub fn init_winit(
             // --- Build cursor + compose frame ---
             let cursor_elements = build_cursor_elements(data, backend.renderer(), cur_camera, cur_zoom, 1.0);
             let mut age = backend.buffer_age().unwrap_or(0);
-            if !data.cached_tile_bg.is_empty() && (camera_moved || zoom_changed) {
+            if !data.render.cached_tile_bg.is_empty() && (camera_moved || zoom_changed) {
                 age = 0;
             }
             let render_ok = match backend.bind() {

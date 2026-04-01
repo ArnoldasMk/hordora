@@ -784,13 +784,13 @@ pub fn update_background_element(
     let canvas_h = (output_size.h as f64 / cur_zoom).ceil() as i32;
     let canvas_area = Rectangle::from_size((canvas_w, canvas_h).into());
 
-    if let Some(elem) = state.cached_bg_elements.get_mut(&output_name) {
+    if let Some(elem) = state.render.cached_bg_elements.get_mut(&output_name) {
         elem.resize(canvas_area, Some(vec![canvas_area]));
         elem.update_uniforms(vec![Uniform::new(
             "u_camera",
             (cur_camera.x as f32, cur_camera.y as f32),
         )]);
-    } else if let Some(elem) = state.cached_tile_bg.get_mut(&output_name) {
+    } else if let Some(elem) = state.render.cached_tile_bg.get_mut(&output_name) {
         elem.resize(canvas_area, Some(vec![canvas_area]));
         elem.update_uniforms(vec![
             Uniform::new("u_camera", (cur_camera.x as f32, cur_camera.y as f32)),
@@ -841,7 +841,7 @@ pub fn compose_frame(
     }
 
     // Ensure this output has a background element (lazy init per output, and re-init after config reload)
-    if !state.cached_bg_elements.contains_key(&output.name()) && !state.cached_tile_bg.contains_key(&output.name()) {
+    if !state.render.cached_bg_elements.contains_key(&output.name()) && !state.render.cached_tile_bg.contains_key(&output.name()) {
         let output_size = output
             .current_mode()
             .map(|m| output.current_transform().transform_size(
@@ -871,7 +871,7 @@ pub fn compose_frame(
     let mut zoomed_normal: Vec<OutputRenderElements> = Vec::new();
     let mut zoomed_widgets: Vec<OutputRenderElements> = Vec::new();
 
-    let blur_enabled = state.blur_down_shader.is_some() && state.blur_up_shader.is_some() && state.blur_mask_shader.is_some();
+    let blur_enabled = state.render.blur_down_shader.is_some() && state.render.blur_up_shader.is_some() && state.render.blur_mask_shader.is_some();
     let mut blur_requests: Vec<BlurRequestData> = Vec::new();
 
     // Focused surface for decoration focus state
@@ -958,7 +958,7 @@ pub fn compose_frame(
             }
 
             // Window surface elements — clip bottom corners to match title bar rounding
-            if let Some(ref shader) = state.corner_clip_shader {
+            if let Some(ref shader) = state.render.corner_clip_shader {
                 let radius = state.config.decorations.corner_radius as f32;
                 if radius > 0.0 {
                     let toplevel_id = smithay::backend::renderer::element::Id::from_wayland_resource(&*wl_surface);
@@ -1007,7 +1007,7 @@ pub fn compose_frame(
 
             // Shadow element: cached per-window, rebuilt only on resize.
             // Stable Id lets the damage tracker skip unchanged shadow regions.
-            if let Some(ref shader) = state.shadow_shader {
+            if let Some(ref shader) = state.render.shadow_shader {
                 use driftwm::config::DecorationConfig;
                 let radius = DecorationConfig::SHADOW_RADIUS;
                 let r = radius.ceil() as i32;
@@ -1057,7 +1057,7 @@ pub fn compose_frame(
                     shadow_count = 1;
                 }
             }
-        } else if let Some(ref shader) = state.corner_clip_shader {
+        } else if let Some(ref shader) = state.render.corner_clip_shader {
             let geo = window.geometry();
             let radius = state.config.decorations.corner_radius as f32;
 
@@ -1105,7 +1105,7 @@ pub fn compose_frame(
                 }
 
                 // Compositor shadow behind CSD windows
-                if let Some(ref shadow_shader) = state.shadow_shader {
+                if let Some(ref shadow_shader) = state.render.shadow_shader {
                     use driftwm::config::DecorationConfig;
                     let shadow_radius = DecorationConfig::SHADOW_RADIUS;
                     let sr = shadow_radius.ceil() as i32;
@@ -1120,7 +1120,7 @@ pub fn compose_frame(
                     let content_size = (geom_size.w, geom_size.h);
                     let corner_r = state.config.decorations.corner_radius as f32;
 
-                    let shadow_entry = state.csd_shadows.entry(wl_surface.id());
+                    let shadow_entry = state.render.csd_shadows.entry(wl_surface.id());
                     let (shadow_elem, cached_size) = shadow_entry.or_insert_with(|| {
                         let elem = PixelShaderElement::new(
                             shadow_shader.clone(),
@@ -1221,7 +1221,7 @@ pub fn compose_frame(
     );
 
     let bg_elements: Vec<OutputRenderElements> =
-        if let Some(elem) = state.cached_bg_elements.get(&output.name()) {
+        if let Some(elem) = state.render.cached_bg_elements.get(&output.name()) {
             vec![OutputRenderElements::Background(
                 RescaleRenderElement::from_element(
                     elem.clone(),
@@ -1229,7 +1229,7 @@ pub fn compose_frame(
                     zoom,
                 ),
             )]
-        } else if let Some(elem) = state.cached_tile_bg.get(&output.name()) {
+        } else if let Some(elem) = state.render.cached_tile_bg.get(&output.name()) {
             vec![OutputRenderElements::TileBg(
                 RescaleRenderElement::from_element(
                     elem.clone(),
@@ -1313,7 +1313,7 @@ pub fn compose_frame(
     if blur_enabled {
         let active_ids: std::collections::HashSet<_> =
             all_blur_requests.iter().map(|r| r.surface_id.clone()).collect();
-        state.blur_cache.retain(|id, _| active_ids.contains(id));
+        state.render.blur_cache.retain(|id, _| active_ids.contains(id));
     }
 
     all_elements
@@ -1352,7 +1352,7 @@ fn process_blur_requests(
     let out_buf_size = output_size.to_logical(1).to_buffer(1, Transform::Normal);
 
     // Shared full-output FBO for behind-content rendering — cached on DriftWm, reused if size matches
-    let mut bg_tex = match state.blur_bg_fbo.take() {
+    let mut bg_tex = match state.render.blur_bg_fbo.take() {
         Some((tex, cached_size)) if cached_size == output_size => tex,
         _ => {
             let Ok(t) = Offscreen::<GlesTexture>::create_buffer(renderer, Fourcc::Abgr8888, out_buf_size)
@@ -1361,14 +1361,14 @@ fn process_blur_requests(
         }
     };
 
-    let down_shader = state.blur_down_shader.clone().unwrap();
-    let up_shader = state.blur_up_shader.clone().unwrap();
+    let down_shader = state.render.blur_down_shader.clone().unwrap();
+    let up_shader = state.render.blur_up_shader.clone().unwrap();
     let blur_passes = state.config.effects.blur_radius as usize;
     let blur_strength = state.config.effects.blur_strength as f32;
     let context_id = renderer.context_id();
-    let scene_gen = state.blur_scene_generation;
-    let geom_gen = state.blur_geometry_generation;
-    let camera_gen = state.blur_camera_generation;
+    let scene_gen = state.render.blur_scene_generation;
+    let geom_gen = state.render.blur_geometry_generation;
+    let camera_gen = state.render.blur_camera_generation;
 
     // ── First pass: create/resize caches, update dirty flags, decide who recomputes ──
     let mut needs_recompute: Vec<bool> = Vec::with_capacity(blur_requests.len());
@@ -1379,16 +1379,16 @@ fn process_blur_requests(
             continue;
         }
 
-        let is_new = !state.blur_cache.contains_key(&req.surface_id);
+        let is_new = !state.render.blur_cache.contains_key(&req.surface_id);
         if is_new {
             if let Some(c) = BlurCache::new(renderer, win_size) {
-                state.blur_cache.insert(req.surface_id.clone(), c);
+                state.render.blur_cache.insert(req.surface_id.clone(), c);
             } else {
                 needs_recompute.push(false);
                 continue;
             }
         }
-        let cache = state.blur_cache.get_mut(&req.surface_id).unwrap();
+        let cache = state.render.blur_cache.get_mut(&req.surface_id).unwrap();
         if cache.size != win_size {
             cache.resize(renderer, win_size);
         }
@@ -1420,7 +1420,7 @@ fn process_blur_requests(
         (prefix + req.elem_start + req.elem_count).min(all_elements.len())
     }).collect();
 
-    let mask_shader = state.blur_mask_shader.clone();
+    let mask_shader = state.render.blur_mask_shader.clone();
 
     // ── Loop 1: re-render bg_tex per depth, crop + blur dirty windows ──
     // Requests are front-to-back so behind_start increases (each successive
@@ -1430,12 +1430,12 @@ fn process_blur_requests(
         if !needs_recompute[i] { continue; }
         let win_size = req.screen_rect.size;
         if win_size.w <= 0 || win_size.h <= 0 { continue; }
-        let Some(cache) = state.blur_cache.get_mut(&req.surface_id) else { continue };
+        let Some(cache) = state.render.blur_cache.get_mut(&req.surface_id) else { continue };
 
         let behind = behind_starts[i];
         if last_bg_depth != Some(behind) {
             let Ok(mut target) = renderer.bind(&mut bg_tex) else {
-                state.blur_bg_fbo = Some((bg_tex, output_size));
+                state.render.blur_bg_fbo = Some((bg_tex, output_size));
                 return;
             };
             let mut dt = OutputDamageTracker::new(output_size, output_scale, Transform::Normal);
@@ -1515,7 +1515,7 @@ fn process_blur_requests(
             );
         }
 
-        let Some(cache) = state.blur_cache.get_mut(&req.surface_id) else { continue };
+        let Some(cache) = state.render.blur_cache.get_mut(&req.surface_id) else { continue };
 
         // Crop surface region into cache.mask
         {
@@ -1580,7 +1580,7 @@ fn process_blur_requests(
     for req in blur_requests.iter() {
         let win_size = req.screen_rect.size;
         if win_size.w <= 0 || win_size.h <= 0 { continue; }
-        let Some(cache) = state.blur_cache.get(&req.surface_id) else { continue };
+        let Some(cache) = state.render.blur_cache.get(&req.surface_id) else { continue };
 
         let prefix = match req.layer {
             BlurLayer::Overlay => overlay_prefix,
@@ -1611,7 +1611,7 @@ fn process_blur_requests(
     }
 
     // Cache bg_tex back for next frame
-    state.blur_bg_fbo = Some((bg_tex, output_size));
+    state.render.blur_bg_fbo = Some((bg_tex, output_size));
 }
 
 /// Which element group a blur request belongs to — determines its prefix offset.
@@ -1748,10 +1748,10 @@ pub fn init_background(state: &mut crate::state::DriftWm, renderer: &mut GlesRen
                     false,
                 ) {
                     Ok(texture) => {
-                        if state.tile_shader.is_none() {
-                            state.tile_shader = compile_tile_bg_shader(renderer);
+                        if state.render.tile_shader.is_none() {
+                            state.render.tile_shader = compile_tile_bg_shader(renderer);
                         }
-                        if let Some(ref shader) = state.tile_shader {
+                        if let Some(ref shader) = state.render.tile_shader {
                             let tw = w as i32;
                             let th = h as i32;
                             let area = Rectangle::from_size(initial_size);
@@ -1770,7 +1770,7 @@ pub fn init_background(state: &mut crate::state::DriftWm, renderer: &mut GlesRen
                                 ],
                                 Kind::Unspecified,
                             );
-                            state.cached_tile_bg.insert(output_name.to_string(), elem);
+                            state.render.cached_tile_bg.insert(output_name.to_string(), elem);
                             return;
                         }
                         tracing::error!("Tile shader compilation failed, using default shader");
@@ -1788,7 +1788,7 @@ pub fn init_background(state: &mut crate::state::DriftWm, renderer: &mut GlesRen
 
     // Reuse cached shader if already compiled (avoids redundant GPU work
     // when multiple outputs each need a background element).
-    let shader = if let Some(ref cached) = state.background_shader {
+    let shader = if let Some(ref cached) = state.render.background_shader {
         cached.clone()
     } else {
         let shader_source = if let Some(path) = state.config.background.shader_path.as_deref() {
@@ -1812,12 +1812,12 @@ pub fn init_background(state: &mut crate::state::DriftWm, renderer: &mut GlesRen
                     .expect("Default shader must compile")
             }
         };
-        state.background_shader = Some(compiled.clone());
+        state.render.background_shader = Some(compiled.clone());
         compiled
     };
 
     let area = Rectangle::from_size(initial_size);
-    state.cached_bg_elements.insert(output_name.to_string(), PixelShaderElement::new(
+    state.render.cached_bg_elements.insert(output_name.to_string(), PixelShaderElement::new(
         shader,
         area,
         Some(vec![area]),
@@ -1897,7 +1897,7 @@ pub fn render_screencopy(
         let use_persistent = size == output_mode_size;
 
         if use_persistent
-            && let Some(cs) = state.capture_state.get_mut(&capture_key)
+            && let Some(cs) = state.render.capture_state.get_mut(&capture_key)
             && cs.last_paint_cursors != paint_cursors
         {
             cs.age = 0;
@@ -1908,7 +1908,7 @@ pub fn render_screencopy(
             ScreencopyBuffer::Dmabuf(dmabuf) => {
                 let mut dmabuf = dmabuf.clone();
                 let cs = if use_persistent {
-                    Some(get_capture_state(&mut state.capture_state, &capture_key, size, scale, transform, paint_cursors))
+                    Some(get_capture_state(&mut state.render.capture_state, &capture_key, size, scale, transform, paint_cursors))
                 } else {
                     None
                 };
@@ -1927,7 +1927,7 @@ pub fn render_screencopy(
             }
             ScreencopyBuffer::Shm(wl_buffer) => {
                 let cs = if use_persistent {
-                    Some(get_capture_state(&mut state.capture_state, &capture_key, size, scale, transform, paint_cursors))
+                    Some(get_capture_state(&mut state.render.capture_state, &capture_key, size, scale, transform, paint_cursors))
                 } else {
                     None
                 };
@@ -2136,7 +2136,7 @@ pub fn render_capture_frames(
         let use_persistent = capture.buffer_size == output_mode_size;
 
         if use_persistent
-            && let Some(cs) = state.capture_state.get_mut(&capture_key)
+            && let Some(cs) = state.render.capture_state.get_mut(&capture_key)
             && cs.last_paint_cursors != paint_cursors
         {
             cs.age = 0;
@@ -2147,7 +2147,7 @@ pub fn render_capture_frames(
         let ok = if let Ok(dmabuf) = smithay::wayland::dmabuf::get_dmabuf(&capture.buffer) {
             let mut dmabuf = dmabuf.clone();
             let cs = if use_persistent {
-                Some(get_capture_state(&mut state.capture_state, &capture_key, capture.buffer_size, scale, Transform::Normal, paint_cursors))
+                Some(get_capture_state(&mut state.render.capture_state, &capture_key, capture.buffer_size, scale, Transform::Normal, paint_cursors))
             } else {
                 None
             };
@@ -2167,7 +2167,7 @@ pub fn render_capture_frames(
             }
         } else {
             let cs = if use_persistent {
-                Some(get_capture_state(&mut state.capture_state, &capture_key, capture.buffer_size, scale, Transform::Normal, paint_cursors))
+                Some(get_capture_state(&mut state.render.capture_state, &capture_key, capture.buffer_size, scale, Transform::Normal, paint_cursors))
             } else {
                 None
             };
