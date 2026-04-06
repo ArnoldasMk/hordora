@@ -301,28 +301,10 @@ impl CompositorHandler for DriftWm {
                                 parent_loc.y + parent_size.h / 2 - geo.size.h / 2,
                             )
                         } else {
-                            let output_geo = {
-                                let output = self.active_output();
-                                output.and_then(|o| self.space.output_geometry(&o))
-                            };
-                            let centered = if output_geo.is_some() {
-                                // SSD title bar is drawn above client content, so
-                                // shift the client down by bar/2 to center the
-                                // visible frame (titlebar + content) on-screen.
-                                let bar_px = if matches!(effective, driftwm::config::DecorationMode::Server) {
-                                    driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT as f64
-                                } else {
-                                    0.0
-                                };
-                                let vc = self.usable_center_screen();
-                                let cam = self.camera(); let z = self.zoom();
-                                let cx = (cam.x + vc.x / z).round() as i32 - geo.size.w / 2;
-                                let cy = (cam.y + bar_px / 2.0 + vc.y / z).round() as i32 - geo.size.h / 2;
-                                (cx, cy)
-                            } else {
-                                (0, 0)
-                            };
-                            self.cascade_position(centered, &window)
+                            self.cursor_place_position(
+                                (geo.size.w, geo.size.h),
+                                &window,
+                            )
                         };
                         let activate = rule.as_ref().is_none_or(|r| !r.widget);
                         self.space.map_element(window.clone(), pos, activate);

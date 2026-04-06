@@ -2,9 +2,15 @@
 
 ## Project
 
-driftwm — a trackpad-first infinite canvas Wayland compositor written in Rust. Windows float on an unbounded 2D plane navigated via trackpad gestures (pan, zoom, pinch). No workspaces, no tiling. Built on [smithay](https://github.com/Smithay/smithay).
+**hordora** — a fork of [driftwm](https://github.com/niceguydave/driftwm), a trackpad-first infinite canvas Wayland compositor written in Rust. Windows float on an unbounded 2D plane navigated via trackpad gestures (pan, zoom, pinch). No workspaces, no tiling. Built on [smithay](https://github.com/Smithay/smithay).
+
+The upstream crate name is still `driftwm` (used in Cargo.toml and all `use driftwm::` imports). This fork lives at `~/projektai/hordora`.
 
 The project is launched (v0.1.x). See `docs/DESIGN.md` for the full specification and `docs/CAVEATS.md` for architectural pitfalls.
+
+### Fork customisations
+
+- `focus_follows_mouse = true` — sloppy focus (Hyprland-style): the window under the pointer gets keyboard focus on hover without being raised.
 
 ## Conventions
 

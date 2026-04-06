@@ -86,34 +86,10 @@ impl XwmHandler for DriftWm {
         {
             // Rule coords: window-center, Y-up. Convert to canvas: top-left, Y-down.
             (x - geo.size.w / 2, -y - geo.size.h / 2)
-        } else {
-            // Account for SSD title bar so the visual center matches viewport center.
-            // navigate_to_window uses camera_to_center_window which offsets by bar/2;
-            // the spawn position must be the exact inverse so cascade detects collisions.
-            let effective = driftwm::config::effective_decoration_mode(
-                rule.as_ref().and_then(|r| r.decoration.as_ref()),
-                &self.config.decorations.default_mode,
-            );
-            let will_have_ssd = match effective {
-                driftwm::config::DecorationMode::Server => true,
-                driftwm::config::DecorationMode::Borderless | driftwm::config::DecorationMode::None => false,
-                // Client mode: defer to the X11 MOTIF hint
-                driftwm::config::DecorationMode::Client => smithay_window.wants_ssd(),
-            };
-            let bar = if will_have_ssd { driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT as f64 } else { 0.0 };
-            let vc = self.usable_center_screen();
-            let centered = self.active_output()
-                .and_then(|o| self.space.output_geometry(&o))
-                .map(|_| {
-                    let cam = self.camera();
-                    let z = self.zoom();
-                    (
-                        (cam.x + vc.x / z).round() as i32 - geo.size.w / 2,
-                        (cam.y + bar / 2.0 + vc.y / z).round() as i32 - geo.size.h / 2,
-                    )
-                })
-                .unwrap_or((0, 0));
-            self.cascade_position(centered, &smithay_window)
+            self.cursor_place_position(
+                (geo.size.w, geo.size.h),
+                &smithay_window,
+            )
         };
 
         let activate = rule.as_ref().is_none_or(|r| !r.widget);
