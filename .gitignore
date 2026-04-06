@@ -5,3 +5,6 @@ __pycache__
 *.tar.gz
 # nix build output symlink
 result
+# Claude
+.claude/
+CLAUDE.md

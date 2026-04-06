@@ -432,7 +432,7 @@ impl Config {
 
         Self {
             mod_key,
-            focus_follows_mouse: raw.focus_follows_mouse.unwrap_or(false),
+            focus_follows_mouse: raw.focus_follows_mouse.unwrap_or(true),
             trackpad_speed,
             mouse_speed,
             friction,

@@ -1170,6 +1170,114 @@ impl DriftWm {
         }
     }
 
+    /// Place a new window near the cursor, snapping its edge to the nearest
+    /// existing window and avoiding overlap. Falls back to cursor position if
+    /// no windows exist on the canvas.
+    pub fn cursor_place_position(
+        &self,
+        new_size: (i32, i32),
+        skip: &Window,
+    ) -> (i32, i32) {
+        let cursor = self.seat.get_pointer().unwrap().current_location();
+        let gap = self.config.snap_gap;
+        let (nw, nh) = (new_size.0 as f64, new_size.1 as f64);
+
+        let new_bar = if skip
+            .wl_surface()
+            .is_some_and(|s| self.decorations.contains_key(&s.id()))
+        {
+            driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT as f64
+        } else {
+            0.0
+        };
+
+        // Collect bounding rects of all existing windows (including SSD bars).
+        let mut rects: Vec<(f64, f64, f64, f64)> = Vec::new(); // (x, y_visual_top, w, h_visual)
+        for w in self.space.elements() {
+            if w == skip {
+                continue;
+            }
+            let Some(loc) = self.space.element_location(w) else {
+                continue;
+            };
+            let size = w.geometry().size;
+            let bar = w
+                .wl_surface()
+                .filter(|s| self.decorations.contains_key(&s.id()))
+                .map_or(0, |_| driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT);
+            rects.push((
+                loc.x as f64,
+                loc.y as f64 - bar as f64,
+                size.w as f64,
+                size.h as f64 + bar as f64,
+            ));
+        }
+
+        // No other windows — place with top-left at cursor.
+        if rects.is_empty() {
+            return (
+                cursor.x as i32 - new_size.0 / 2,
+                cursor.y as i32 - new_size.1 / 2,
+            );
+        }
+
+        // New window's visual height including its own SSD bar.
+        let new_visual_h = nh + new_bar;
+
+        // Generate candidate positions by snapping to each existing window's edges.
+        // For each window, try placing the new window to the right, left, below, above.
+        let mut candidates: Vec<(f64, f64)> = Vec::new(); // (x, y_content_top)
+        for &(rx, ry, rw, rh) in &rects {
+            // Right of window: new left edge touches window right edge + gap
+            candidates.push((rx + rw + gap, ry + new_bar));
+            // Left of window: new right edge touches window left edge - gap
+            candidates.push((rx - gap - nw, ry + new_bar));
+            // Below window: new top (visual) edge touches window bottom edge + gap
+            candidates.push((rx, ry + rh + gap + new_bar));
+            // Above window: new bottom edge touches window top (visual) edge - gap
+            candidates.push((rx, ry - gap - new_visual_h + new_bar));
+        }
+
+        // Also include cursor-centered as a candidate
+        candidates.push((cursor.x - nw / 2.0, cursor.y - nh / 2.0));
+
+        // Filter out candidates that overlap any existing window.
+        let no_overlap = |cx: f64, cy: f64| -> bool {
+            let cy_visual = cy - new_bar;
+            for &(rx, ry, rw, rh) in &rects {
+                if cx < rx + rw + gap
+                    && cx + nw > rx - gap
+                    && cy_visual < ry + rh + gap
+                    && cy_visual + new_visual_h > ry - gap
+                {
+                    return false;
+                }
+            }
+            true
+        };
+
+        // Pick the closest non-overlapping candidate to the cursor.
+        let best = candidates
+            .iter()
+            .copied()
+            .filter(|&(cx, cy)| no_overlap(cx, cy))
+            .min_by(|&(ax, ay), &(bx, by)| {
+                let da = (ax + nw / 2.0 - cursor.x).powi(2) + (ay + nh / 2.0 - cursor.y).powi(2);
+                let db = (bx + nw / 2.0 - cursor.x).powi(2) + (by + nh / 2.0 - cursor.y).powi(2);
+                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+        if let Some((bx, by)) = best {
+            return (bx.round() as i32, by.round() as i32);
+        }
+
+        // All candidates overlap — fall back to cascade from cursor position.
+        self.cascade_position(
+            (cursor.x as i32 - new_size.0 / 2, cursor.y as i32 - new_size.1 / 2),
+            skip,
+        )
+    }
+
     /// Write viewport center + zoom to `$XDG_RUNTIME_DIR/driftwm/state` if changed.
     /// Atomic: writes to .tmp then renames.
     pub fn write_state_file_if_dirty(&mut self) {
