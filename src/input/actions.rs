@@ -1,7 +1,6 @@
 use smithay::{
     input::pointer::MotionEvent,
     utils::{Point, Size, SERIAL_COUNTER},
-    wayland::seat::WaylandFocus,
 };
 
 use driftwm::canvas::{self};
@@ -40,41 +39,22 @@ impl DriftWm {
                 crate::state::spawn_command(cmd);
             }
             Action::CloseWindow => {
-                let keyboard = self.seat.get_keyboard().unwrap();
-                if let Some(focus) = keyboard.current_focus() {
-                    let window = self
-                        .space
-                        .elements()
-                        .find(|w| w.wl_surface().as_deref() == Some(&focus.0))
-                        .cloned();
-                    if let Some(window) = window {
-                        window.send_close();
-                    }
+                if let Some(window) = self.focused_window().filter(|w| !w.is_widget()) {
+                    window.send_close();
                 }
             }
             Action::NudgeWindow(dir) => {
-                let keyboard = self.seat.get_keyboard().unwrap();
-                if let Some(focus) = keyboard.current_focus() {
-                    if driftwm::config::applied_rule(&focus.0).is_some_and(|r| r.widget) {
-                        return;
-                    }
-                    let window = self
-                        .space
-                        .elements()
-                        .find(|w| w.wl_surface().as_deref() == Some(&focus.0))
-                        .cloned();
-                    if let Some(window) = window
-                        && let Some(loc) = self.space.element_location(&window)
-                    {
-                        let step = self.config.nudge_step;
-                        let (ux, uy) = dir.to_unit_vec();
-                        let offset = (
-                            (ux * step as f64).round() as i32,
-                            (uy * step as f64).round() as i32,
-                        );
-                        let new_loc = loc + Point::from(offset);
-                        self.space.map_element(window, new_loc, false);
-                    }
+                if let Some(window) = self.focused_window().filter(|w| !w.is_widget())
+                    && let Some(loc) = self.space.element_location(&window)
+                {
+                    let step = self.config.nudge_step;
+                    let (ux, uy) = dir.to_unit_vec();
+                    let offset = (
+                        (ux * step as f64).round() as i32,
+                        (uy * step as f64).round() as i32,
+                    );
+                    let new_loc = loc + Point::from(offset);
+                    self.space.map_element(window, new_loc, false);
                 }
             }
             Action::PanViewport(dir) => {
@@ -110,37 +90,19 @@ impl DriftWm {
                 pointer.frame(self);
             }
             Action::CenterWindow => {
-                let keyboard = self.seat.get_keyboard().unwrap();
-                let focused_non_widget = keyboard.current_focus().and_then(|focus| {
-                    if driftwm::config::applied_rule(&focus.0).is_some_and(|r| r.widget) {
-                        return None;
-                    }
-                    self.space
-                        .elements()
-                        .find(|w| w.wl_surface().as_deref() == Some(&focus.0))
-                        .cloned()
-                });
-                if let Some(window) = focused_non_widget {
+                if let Some(window) = self.focused_window().filter(|w| !w.is_widget()) {
                     self.navigate_to_window(&window, true);
                 } else {
-                    // No focused non-widget window — find and focus the closest to viewport center
-                    let vc = self.usable_center_screen();
-                    let camera = self.camera();
-                    let zoom = self.zoom();
-                    let center_x = camera.x + vc.x / zoom;
-                    let center_y = camera.y + vc.y / zoom;
+                    let center = self.viewport_center_canvas();
                     let closest = self
                         .space
                         .elements()
-                        .filter(|w| {
-                            !w.wl_surface().as_ref().and_then(|s| driftwm::config::applied_rule(s))
-                                .is_some_and(|r| r.widget)
-                        })
+                        .filter(|w| !w.is_widget())
                         .min_by(|a, b| {
                             let dist = |w: &smithay::desktop::Window| {
                                 let c = self.window_visual_center(w).unwrap_or_default();
-                                let dx = c.x - center_x;
-                                let dy = c.y - center_y;
+                                let dx = c.x - center.x;
+                                let dy = c.y - center.y;
                                 dx * dx + dy * dy
                             };
                             dist(a).partial_cmp(&dist(b)).unwrap()
@@ -166,22 +128,11 @@ impl DriftWm {
                     Anchor(Point<f64, smithay::utils::Logical>),
                 }
 
-                let keyboard = self.seat.get_keyboard().unwrap();
-                let focused = keyboard.current_focus().and_then(|focus| {
-                    self.space
-                        .elements()
-                        .find(|w| w.wl_surface().as_deref() == Some(&focus.0))
-                        .cloned()
-                });
-
+                let focused = self.focused_window();
                 let viewport_size = self.get_viewport_size();
-                let vc = self.usable_center_screen();
                 let camera = self.camera();
                 let zoom = self.zoom();
-                let viewport_center = Point::from((
-                    camera.x + vc.x / zoom,
-                    camera.y + vc.y / zoom,
-                ));
+                let viewport_center = self.viewport_center_canvas();
 
                 let (origin, skip) = if let Some(ref w) = focused {
                     let loc = self.space.element_location(w).unwrap_or_default();
@@ -203,10 +154,7 @@ impl DriftWm {
                     (viewport_center, None)
                 };
 
-                let windows = self.space.elements().filter(|w| {
-                    !w.wl_surface().as_ref().and_then(|s| driftwm::config::applied_rule(s))
-                        .is_some_and(|r| r.widget)
-                }).map(|w| {
+                let windows = self.space.elements().filter(|w| !w.is_widget()).map(|w| {
                     let loc = self.space.element_location(w).unwrap_or_default();
                     let size = w.geometry().size;
                     let closest = canvas::closest_point_on_rect(origin, loc, size);
@@ -369,10 +317,7 @@ impl DriftWm {
                     // Compute bounding box of all windows
                     let usable = self.get_usable_area();
                     let vc = self.usable_center_screen();
-                    let windows = self.space.elements().filter(|w| {
-                        !w.wl_surface().as_ref().and_then(|s| driftwm::config::applied_rule(s))
-                            .is_some_and(|r| r.widget)
-                    }).map(|w| {
+                    let windows = self.space.elements().filter(|w| !w.is_widget()).map(|w| {
                         let loc = self.space.element_location(w).unwrap_or_default();
                         let size = w.geometry().size;
                         (loc, size)
@@ -403,65 +348,36 @@ impl DriftWm {
                     self.exit_fullscreen();
                 } else if was_fullscreen.is_some() {
                     // Gesture already exited fullscreen — don't re-enter
-                } else {
-                    let keyboard = self.seat.get_keyboard().unwrap();
-                    if let Some(focus) = keyboard.current_focus() {
-                        let window = self
-                            .space
-                            .elements()
-                            .find(|w| w.wl_surface().as_deref() == Some(&focus.0))
-                            .cloned();
-                        if let Some(window) = window {
-                            self.enter_fullscreen(&window);
-                        }
-                    }
+                } else if let Some(window) = self.focused_window().filter(|w| !w.is_widget()) {
+                    self.enter_fullscreen(&window);
                 }
             }
             Action::FitWindow => {
-                let keyboard = self.seat.get_keyboard().unwrap();
-                if let Some(focus) = keyboard.current_focus() {
-                    let window = self
-                        .space
-                        .elements()
-                        .find(|w| w.wl_surface().as_deref() == Some(&focus.0))
-                        .cloned();
-                    if let Some(window) = window {
-                        self.toggle_fit_window(&window);
-                    }
+                if let Some(window) = self.focused_window().filter(|w| !w.is_widget()) {
+                    self.toggle_fit_window(&window);
                 }
             }
             Action::SendToOutput(dir) => {
-                let keyboard = self.seat.get_keyboard().unwrap();
-                if let Some(focus) = keyboard.current_focus() {
-                    if driftwm::config::applied_rule(&focus.0).is_some_and(|r| r.widget) {
-                        return;
-                    }
-                    let window = self
-                        .space
-                        .elements()
-                        .find(|w| w.wl_surface().as_deref() == Some(&focus.0))
-                        .cloned();
-                    if let Some(window) = window
-                        && let Some(from_output) = self.output_for_window(&window)
-                        && let Some(target_output) = self.output_in_direction(&from_output, dir)
-                    {
-                        // Compute target output's usable area center in canvas coords
-                        let (target_cam, target_zoom) = {
-                            let os = crate::state::output_state(&target_output);
-                            (os.camera, os.zoom)
-                        };
-                        let target_vc = crate::state::usable_center_for_output(&target_output);
-                        let center_x = target_cam.x + target_vc.x / target_zoom;
-                        let center_y = target_cam.y + target_vc.y / target_zoom;
-                        let geo = window.geometry();
-                        let new_loc = Point::from((
-                            (center_x - geo.size.w as f64 / 2.0) as i32,
-                            (center_y - geo.size.h as f64 / 2.0) as i32,
-                        ));
-                        self.space.map_element(window.clone(), new_loc, true);
-                        let serial = smithay::utils::SERIAL_COUNTER.next_serial();
-                        self.raise_and_focus(&window, serial);
-                    }
+                if let Some(window) = self.focused_window().filter(|w| !w.is_widget())
+                    && let Some(from_output) = self.output_for_window(&window)
+                    && let Some(target_output) = self.output_in_direction(&from_output, dir)
+                {
+                    // Compute target output's usable area center in canvas coords
+                    let (target_cam, target_zoom) = {
+                        let os = crate::state::output_state(&target_output);
+                        (os.camera, os.zoom)
+                    };
+                    let target_vc = crate::state::usable_center_for_output(&target_output);
+                    let center_x = target_cam.x + target_vc.x / target_zoom;
+                    let center_y = target_cam.y + target_vc.y / target_zoom;
+                    let geo = window.geometry();
+                    let new_loc = Point::from((
+                        (center_x - geo.size.w as f64 / 2.0) as i32,
+                        (center_y - geo.size.h as f64 / 2.0) as i32,
+                    ));
+                    self.space.map_element(window.clone(), new_loc, true);
+                    let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+                    self.raise_and_focus(&window, serial);
                 }
             }
             Action::ReloadConfig => {

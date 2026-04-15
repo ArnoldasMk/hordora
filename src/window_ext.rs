@@ -21,6 +21,10 @@ pub trait WindowExt {
     /// Whether this is a modal dialog (xdg-dialog-v1). Non-modal parented
     /// windows (palettes, find dialogs) return false.
     fn is_modal(&self) -> bool;
+    /// Whether this window is marked as a widget by an applied window rule.
+    /// Widgets are persistent canvas furniture and should be excluded from
+    /// most user-facing window operations (close, nudge, focus-cycle, etc).
+    fn is_widget(&self) -> bool;
 }
 
 impl WindowExt for Window {
@@ -163,5 +167,13 @@ impl WindowExt for Window {
         } else {
             false
         }
+    }
+
+    fn is_widget(&self) -> bool {
+        use smithay::wayland::seat::WaylandFocus;
+        self.wl_surface()
+            .as_deref()
+            .and_then(crate::config::applied_rule)
+            .is_some_and(|r| r.widget)
     }
 }

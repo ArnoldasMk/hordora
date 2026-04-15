@@ -1141,6 +1141,25 @@ impl DriftWm {
         ))
     }
 
+    /// Center of the active output's viewport expressed in canvas coordinates.
+    pub fn viewport_center_canvas(&self) -> Point<f64, Logical> {
+        let vc = self.usable_center_screen();
+        let camera = self.camera();
+        let zoom = self.zoom();
+        Point::from((camera.x + vc.x / zoom, camera.y + vc.y / zoom))
+    }
+
+    /// Currently keyboard-focused window, if any.
+    /// Does not filter widgets — pair with `.filter(|w| !w.is_widget())` when needed.
+    pub fn focused_window(&self) -> Option<Window> {
+        let keyboard = self.seat.get_keyboard()?;
+        let focus = keyboard.current_focus()?;
+        self.space
+            .elements()
+            .find(|w| w.wl_surface().as_deref() == Some(&focus.0))
+            .cloned()
+    }
+
     /// SSD title bar height for a window (0 for CSD/borderless).
     pub fn window_ssd_bar(&self, window: &Window) -> i32 {
         window
