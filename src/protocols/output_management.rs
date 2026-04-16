@@ -604,10 +604,10 @@ where
             } => {
                 head_cfg.transform = wl_to_transform(t);
             }
-            zwlr_output_configuration_head_v1::Request::SetScale { scale } => {
-                if scale > 0.0 {
-                    head_cfg.scale = Some(scale);
-                }
+            zwlr_output_configuration_head_v1::Request::SetScale { scale }
+                if scale > 0.0 =>
+            {
+                head_cfg.scale = Some(scale);
             }
             zwlr_output_configuration_head_v1::Request::SetAdaptiveSync { .. } => {
                 // VRR not supported
