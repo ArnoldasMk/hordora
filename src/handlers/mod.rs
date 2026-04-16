@@ -15,8 +15,10 @@ use smithay::{
     delegate_single_pixel_buffer, delegate_viewporter, delegate_xdg_activation,
     input::{
         Seat, SeatHandler, SeatState, keyboard,
-        pointer::{CursorIcon, CursorImageStatus, PointerHandle},
+        dnd::{self, DnDGrab},
+        pointer::{CursorIcon, CursorImageStatus, Focus, PointerHandle},
     },
+    utils::Serial,
     reexports::input::DeviceCapability as LibinputCapability,
     reexports::wayland_server::{
         Resource,
@@ -115,8 +117,33 @@ impl DataDeviceHandler for DriftWm {
     }
 }
 
-impl WaylandDndGrabHandler for DriftWm {}
-impl smithay::input::dnd::DndGrabHandler for DriftWm {}
+impl WaylandDndGrabHandler for DriftWm {
+    fn dnd_requested<S: dnd::Source>(
+        &mut self,
+        source: S,
+        _icon: Option<WlSurface>,
+        seat: Seat<Self>,
+        serial: Serial,
+        type_: dnd::GrabType,
+    ) {
+        match type_ {
+            dnd::GrabType::Pointer => {
+                let pointer = seat.get_pointer().unwrap();
+                let start_data = pointer.grab_start_data().unwrap();
+                let grab =
+                    DnDGrab::new_pointer(&self.display_handle, start_data, source, seat);
+                pointer.set_grab(self, grab, serial, Focus::Keep);
+            }
+            dnd::GrabType::Touch => {
+                let touch = seat.get_touch().unwrap();
+                let start_data = touch.grab_start_data().unwrap();
+                let grab = DnDGrab::new_touch(&self.display_handle, start_data, source, seat);
+                touch.set_grab(self, grab, serial);
+            }
+        }
+    }
+}
+impl dnd::DndGrabHandler for DriftWm {}
 
 delegate_data_device!(DriftWm);
 
