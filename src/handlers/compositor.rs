@@ -180,6 +180,15 @@ impl CompositorHandler for DriftWm {
                     let geo = window.geometry();
                     let has_size = geo.size.w > 0 && geo.size.h > 0;
 
+                    // Capture preferred size once. Later updated only on user
+                    // resize-grab completion (see handle_resize_commit).
+                    if has_size
+                        && !crate::state::fit::is_fit(&window)
+                        && !self.fullscreen.values().any(|fs| fs.window == window)
+                    {
+                        crate::state::fit::set_restore_size_if_missing(&root, geo.size);
+                    }
+
                     // Read app_id/title and check window rules
                     let (app_id, title) = with_states(&root, |states| {
                         states
@@ -388,6 +397,25 @@ impl CompositorHandler for DriftWm {
 
                 // During resize, adjust window position for top/left edge drags
                 self.handle_resize_commit(&window, &root);
+
+                // Re-center after unfit once the client has actually shrunk
+                // from the fit-era geometry. Waiting for the size change
+                // avoids firing while the client is still reporting the
+                // pre-exit size (which would re-center around the big fit
+                // size and place the window far off-screen).
+                if let Some(&(target_center, pre_exit_size)) = self.pending_recenter.get(&root.id()) {
+                    let geo = window.geometry();
+                    if geo.size.w > 0 && geo.size.h > 0 && geo.size != pre_exit_size {
+                        let bar = self.window_ssd_bar(&window);
+                        let total_h = geo.size.h + bar;
+                        let new_loc = smithay::utils::Point::from((
+                            (target_center.x - geo.size.w as f64 / 2.0) as i32,
+                            (target_center.y - total_h as f64 / 2.0) as i32 + bar,
+                        ));
+                        self.space.map_element(window.clone(), new_loc, false);
+                        self.pending_recenter.remove(&root.id());
+                    }
+                }
             }
         }
 
@@ -617,6 +645,9 @@ impl DriftWm {
 
         // If we're waiting for the final commit, go idle
         if matches!(resize_state, ResizeState::WaitingForLastCommit { .. }) {
+            // User finished resizing — anchor the restore size to their choice
+            // so a subsequent fit/fullscreen round-trip restores to this.
+            crate::state::fit::set_restore_size(surface, current_geo.size);
             with_states(surface, |states| {
                 states
                     .data_map

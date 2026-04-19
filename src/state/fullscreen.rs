@@ -26,12 +26,17 @@ impl DriftWm {
         let viewport_size = self.get_viewport_size();
         let saved_location = self.space.element_location(window).unwrap_or_default();
 
+        let saved_size = window
+            .wl_surface()
+            .and_then(|s| super::fit::restore_size(&s))
+            .unwrap_or_else(|| window.geometry().size);
+
         self.fullscreen.insert(output, FullscreenState {
             window: window.clone(),
             saved_location,
             saved_camera: self.camera(),
             saved_zoom: self.zoom(),
-            saved_size: window.geometry().size,
+            saved_size,
         });
 
         window.enter_fullscreen_configure(viewport_size);

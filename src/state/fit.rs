@@ -1,6 +1,6 @@
 use smithay::{
     desktop::Window,
-    reexports::wayland_server::protocol::wl_surface::WlSurface,
+    reexports::wayland_server::{Resource, protocol::wl_surface::WlSurface},
     utils::{Logical, Point, Size},
     wayland::{compositor::with_states, seat::WaylandFocus},
 };
@@ -13,6 +13,17 @@ use super::DriftWm;
 /// Some(size) = currently fit, holding the pre-fit size.
 /// None = not fit.
 pub struct FitState(pub Option<Size<i32, Logical>>);
+
+/// Per-window "restore-to" size, used by fit/fullscreen to remember what to
+/// resize back to. Tracked separately from `window.geometry().size` because
+/// Chromium progressively shrinks its reported geometry after each
+/// `Some(size)` configure (its CSD titlebar isn't suppressed by the Tiled
+/// hint) — re-reading geometry on each fit would cause a spiral.
+///
+/// Updated on first map (client's preferred size) and at the end of a user
+/// resize grab. Not touched on passive commits, so Chromium's shrunk
+/// reported size never leaks in.
+pub struct RestoreSize(pub Size<i32, Logical>);
 
 pub fn is_fit(window: &Window) -> bool {
     let Some(wl_surface) = window.wl_surface() else { return false };
@@ -35,6 +46,37 @@ pub fn clear_fit_state(wl_surface: &WlSurface) {
     });
 }
 
+pub fn restore_size(wl_surface: &WlSurface) -> Option<Size<i32, Logical>> {
+    with_states(wl_surface, |states| {
+        states
+            .data_map
+            .get::<std::sync::Mutex<RestoreSize>>()
+            .and_then(|m| m.lock().ok())
+            .map(|g| g.0)
+    })
+}
+
+pub fn set_restore_size(wl_surface: &WlSurface, size: Size<i32, Logical>) {
+    with_states(wl_surface, |states| {
+        states
+            .data_map
+            .insert_if_missing_threadsafe(|| std::sync::Mutex::new(RestoreSize(size)));
+        if let Some(m) = states.data_map.get::<std::sync::Mutex<RestoreSize>>()
+            && let Ok(mut guard) = m.lock()
+        {
+            guard.0 = size;
+        }
+    });
+}
+
+pub fn set_restore_size_if_missing(wl_surface: &WlSurface, size: Size<i32, Logical>) {
+    with_states(wl_surface, |states| {
+        states
+            .data_map
+            .insert_if_missing_threadsafe(|| std::sync::Mutex::new(RestoreSize(size)));
+    });
+}
+
 impl DriftWm {
     pub fn fit_window(&mut self, window: &Window) {
         let Some(wl_surface) = window.wl_surface() else { return };
@@ -42,7 +84,9 @@ impl DriftWm {
             return;
         }
 
-        let current_size = window.geometry().size;
+        // Use the tracked RestoreSize rather than window.geometry().size —
+        // for Chromium the latter shrinks on each unfit round-trip.
+        let current_size = restore_size(&wl_surface).unwrap_or_else(|| window.geometry().size);
 
         // Save current size into data_map
         with_states(&wl_surface, |states| {
@@ -124,8 +168,15 @@ impl DriftWm {
             (center.y - total_h as f64 / 2.0) as i32 + bar,
         ));
 
+        // Record the current (fit-era) geometry so the commit handler can
+        // tell when the client has actually processed the exit configure,
+        // then re-center using the real post-unfit size.
+        let pre_exit_size = window.geometry().size;
+
         window.exit_fit_configure(saved_size);
         self.space.map_element(window.clone(), new_loc, false);
+
+        self.pending_recenter.insert(wl_surface.id(), (center, pre_exit_size));
     }
 
     pub fn toggle_fit_window(&mut self, window: &Window) {

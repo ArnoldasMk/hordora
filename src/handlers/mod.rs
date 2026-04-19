@@ -426,48 +426,7 @@ use smithay::delegate_xdg_decoration;
 use smithay::wayland::shell::xdg::ToplevelSurface;
 use smithay::wayland::shell::xdg::decoration::XdgDecorationHandler;
 
-/// Convert a `DecorationMode` to the wire-protocol mode we advertise to clients.
-/// Anything non-Client means SSD on the wire.
-pub fn decoration_mode_to_wire(
-    mode: &driftwm::config::DecorationMode,
-) -> smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode {
-    use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
-    match mode {
-        driftwm::config::DecorationMode::Client => Mode::ClientSide,
-        _ => Mode::ServerSide,
-    }
-}
-
-/// Set all four Tiled states on the toplevel's pending state. niri trick:
-/// GTK and other toolkits read Tiled as "drop your shadow + rounded corners"
-/// even if they ignore xdg-decoration. driftwm draws uniform shadow + corners
-/// on every window, so client chrome would just collide with ours.
-///
-/// Caveat: Tiled also affects how some clients pick a default size — terminals
-/// like Alacritty interpret it as "fill the tile" and ignore `--dimensions`.
-/// So we skip it for windows where the user wants to be left alone (widget
-/// rules; effective mode `None`).
-pub fn set_tiled_states(toplevel: &ToplevelSurface) {
-    use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
-    toplevel.with_pending_state(|state| {
-        state.states.set(xdg_toplevel::State::TiledLeft);
-        state.states.set(xdg_toplevel::State::TiledRight);
-        state.states.set(xdg_toplevel::State::TiledTop);
-        state.states.set(xdg_toplevel::State::TiledBottom);
-    });
-}
-
-/// Inverse of `set_tiled_states` — used when a rule (widget, decoration=none)
-/// indicates the client should not be told it's tiled.
-pub fn unset_tiled_states(toplevel: &ToplevelSurface) {
-    use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
-    toplevel.with_pending_state(|state| {
-        state.states.unset(xdg_toplevel::State::TiledLeft);
-        state.states.unset(xdg_toplevel::State::TiledRight);
-        state.states.unset(xdg_toplevel::State::TiledTop);
-        state.states.unset(xdg_toplevel::State::TiledBottom);
-    });
-}
+pub use driftwm::window_ext::{decoration_mode_to_wire, set_tiled_states, unset_tiled_states};
 
 impl XdgDecorationHandler for DriftWm {
     fn new_decoration(&mut self, toplevel: ToplevelSurface) {

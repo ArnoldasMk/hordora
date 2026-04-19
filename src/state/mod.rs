@@ -350,6 +350,15 @@ pub struct DriftWm {
     // -- global: window management --
     pub pending_center: HashSet<WlSurface>,
     pub pending_size: HashSet<WlSurface>,
+    /// After unfit, re-center the window around `target_center` once its
+    /// reported geometry actually changes from `pre_exit_size` — handles
+    /// clients (Chromium) whose post-unfit size is smaller than what we
+    /// configured. Waiting for the size change avoids firing while the
+    /// client is still reporting the fit-era geometry.
+    pub pending_recenter: HashMap<
+        smithay::reexports::wayland_server::backend::ObjectId,
+        (Point<f64, Logical>, smithay::utils::Size<i32, Logical>),
+    >,
 
     // -- global: focus/navigation --
     pub focus_history: Vec<Window>,
@@ -616,6 +625,7 @@ impl DriftWm {
             config,
             pending_center: HashSet::new(),
             pending_size: HashSet::new(),
+            pending_recenter: HashMap::new(),
             focus_history: Vec::new(),
             cycle_state: None,
             held_action: None,

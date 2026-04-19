@@ -1,6 +1,49 @@
 use smithay::desktop::Window;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Rectangle, Size};
+use smithay::wayland::shell::xdg::ToplevelSurface;
+
+/// Set all four Tiled states on the toplevel's pending state. niri trick:
+/// GTK and other toolkits read Tiled as "drop your shadow + rounded corners"
+/// even if they ignore xdg-decoration. driftwm draws uniform shadow + corners
+/// on every window, so client chrome would just collide with ours.
+///
+/// Caveat: Tiled also affects how some clients pick a default size — SCTK-based
+/// terminals like Alacritty interpret `Tiled + size=None` as "stay at current
+/// tile size" rather than "pick preferred". That's why the exit-fit / exit-
+/// fullscreen paths call `unset_tiled_states` before sending the restore configure.
+pub fn set_tiled_states(toplevel: &ToplevelSurface) {
+    use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+    toplevel.with_pending_state(|state| {
+        state.states.set(xdg_toplevel::State::TiledLeft);
+        state.states.set(xdg_toplevel::State::TiledRight);
+        state.states.set(xdg_toplevel::State::TiledTop);
+        state.states.set(xdg_toplevel::State::TiledBottom);
+    });
+}
+
+/// Inverse of `set_tiled_states`.
+pub fn unset_tiled_states(toplevel: &ToplevelSurface) {
+    use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+    toplevel.with_pending_state(|state| {
+        state.states.unset(xdg_toplevel::State::TiledLeft);
+        state.states.unset(xdg_toplevel::State::TiledRight);
+        state.states.unset(xdg_toplevel::State::TiledTop);
+        state.states.unset(xdg_toplevel::State::TiledBottom);
+    });
+}
+
+/// Convert a `DecorationMode` to the wire-protocol mode we advertise to clients.
+/// Anything non-Client means SSD on the wire.
+pub fn decoration_mode_to_wire(
+    mode: &crate::config::DecorationMode,
+) -> smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode {
+    use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
+    match mode {
+        crate::config::DecorationMode::Client => Mode::ClientSide,
+        _ => Mode::ServerSide,
+    }
+}
 
 /// Extension trait on `Window` for operations that differ per window type
 /// (Wayland vs X11). Avoids `.toplevel().unwrap()` which panics for X11 windows.
@@ -95,13 +138,10 @@ impl WindowExt for Window {
     fn exit_fullscreen_configure(&self, saved_size: Size<i32, Logical>) {
         if let Some(toplevel) = self.toplevel() {
             use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+            // See exit_fit_configure: keep Tiled, send saved_size explicitly.
             toplevel.with_pending_state(|state| {
                 state.states.unset(xdg_toplevel::State::Fullscreen);
-                if state.states.contains(xdg_toplevel::State::Maximized) {
-                    state.size = Some(saved_size);
-                } else {
-                    state.size = None;
-                }
+                state.size = Some(saved_size);
             });
             toplevel.send_configure();
         } else if let Some(x11) = self.x11_surface() {
@@ -128,9 +168,14 @@ impl WindowExt for Window {
     fn exit_fit_configure(&self, saved_size: Size<i32, Logical>) {
         if let Some(toplevel) = self.toplevel() {
             use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+            // Keep Tiled set (suppresses CSD on GTK/Chromium — so there's no
+            // chrome to subtract from an explicit size, avoiding the historical
+            // shrink spiral on repeated toggles) and send saved_size explicitly
+            // (avoids SCTK reading "Tiled + None" as "stay at current size").
+            // Matches niri's approach of always configuring with an explicit size.
             toplevel.with_pending_state(|state| {
                 state.states.unset(xdg_toplevel::State::Maximized);
-                state.size = None;
+                state.size = Some(saved_size);
             });
             toplevel.send_configure();
         } else if let Some(x11) = self.x11_surface() {
