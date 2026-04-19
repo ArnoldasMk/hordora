@@ -267,19 +267,54 @@ impl CompositorHandler for DriftWm {
                         self.space.map_element(window.clone(), pos, activate);
                     }
 
-                    // Resolve effective decoration mode: explicit rule wins, else
-                    // global default_mode. Always re-apply (idempotent — needed on
-                    // tray reopen and as the canonical late-app_id override).
-                    let effective = driftwm::config::effective_decoration_mode(
-                        rule.as_ref().and_then(|r| r.decoration.as_ref()),
-                        &self.config.decorations.default_mode,
-                    ).clone();
+                    // Resolve effective decoration mode. Priority:
+                    //   1. Explicit window rule wins — we override whatever the
+                    //      client negotiated.
+                    //   2. Otherwise, honor what xdg-decoration negotiation
+                    //      already produced (state.decoration_mode).
+                    //   3. If the client never bound xdg-decoration (pending
+                    //      mode is None), fall back to default_mode.
+                    //
+                    // The previous logic unconditionally forced `rule OR default_mode`
+                    // onto the wire, which clobbered a client's request_mode(Server)
+                    // any time default_mode was Client (the default). That caused
+                    // Qt apps to CSD and Alacritty to fall back to SCTK chrome.
+                    let rule_explicit = rule
+                        .as_ref()
+                        .and_then(|r| r.decoration.as_ref())
+                        .cloned();
+
+                    let effective = if let Some(ref m) = rule_explicit {
+                        m.clone()
+                    } else if let Some(toplevel) = window.toplevel() {
+                        use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode;
+                        let negotiated = toplevel.with_pending_state(|s| s.decoration_mode);
+                        let default = &self.config.decorations.default_mode;
+                        let default_wire = crate::handlers::decoration_mode_to_wire(default);
+                        // If the client accepted what we advertised, keep the
+                        // full DecorationMode (preserves Borderless / None,
+                        // which both map to ServerSide on the wire and would
+                        // otherwise be lost in a round-trip).
+                        match negotiated {
+                            None => default.clone(),
+                            Some(w) if w == default_wire => default.clone(),
+                            Some(Mode::ServerSide) => driftwm::config::DecorationMode::Server,
+                            Some(Mode::ClientSide) => driftwm::config::DecorationMode::Client,
+                            _ => default.clone(),
+                        }
+                    } else {
+                        self.config.decorations.default_mode.clone()
+                    };
 
                     if let Some(toplevel) = window.toplevel() {
-                        let wire = crate::handlers::decoration_mode_to_wire(&effective);
-                        toplevel.with_pending_state(|state| {
-                            state.decoration_mode = Some(wire);
-                        });
+                        // Only overwrite the wire mode when a rule is forcing
+                        // it — don't undo the client's own negotiated choice.
+                        if rule_explicit.is_some() {
+                            let wire = crate::handlers::decoration_mode_to_wire(&effective);
+                            toplevel.with_pending_state(|state| {
+                                state.decoration_mode = Some(wire);
+                            });
+                        }
 
                         // Sync Tiled hint to the resolved intent. Skip Tiled when
                         // the user wants the client left alone: widget rules

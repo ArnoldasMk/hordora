@@ -47,10 +47,11 @@ impl XdgShellHandler for DriftWm {
             .unwrap_or((0, 0));
 
         // Send initial configure — the client won't render until it gets this.
-        // Set Tiled state so toolkits (especially GTK) drop their own shadows
-        // and rounded corners; driftwm draws uniform chrome on every window.
+        // Tiled states are deferred to the first-commit handler (compositor.rs),
+        // where rules/app_id are known. Setting Tiled here with no size makes
+        // SCTK-based clients (alacritty) read "tiled at 0x0" and commit a
+        // 0-width wl_shm buffer, which is a protocol error.
         if let Some(toplevel) = window.toplevel() {
-            crate::handlers::set_tiled_states(toplevel);
             toplevel.send_configure();
         }
 

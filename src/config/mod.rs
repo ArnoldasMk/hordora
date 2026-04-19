@@ -592,9 +592,19 @@ fn parse_decoration_config(raw: DecorationFileConfig) -> DecorationConfig {
 
     let default_mode = match raw.default_mode.as_deref() {
         Some("client") | None => DecorationMode::Client,
-        Some("server") => DecorationMode::Server,
         Some("borderless") => DecorationMode::Borderless,
         Some("none") => DecorationMode::None,
+        Some("server") => {
+            // Reserved for per-window rules. As a global default it's a footgun:
+            // GTK/Electron toolkits ignore xdg-decoration and keep drawing CSD,
+            // producing a double title bar.
+            tracing::warn!(
+                "default_mode = \"server\" is not supported globally (many toolkits \
+                 ignore xdg-decoration and draw double titlebars). Use it in \
+                 [[window_rules]] for specific apps instead. Falling back to \"client\"."
+            );
+            DecorationMode::Client
+        }
         Some(other) => {
             tracing::warn!("Unknown default_mode '{other}', using client");
             DecorationMode::Client

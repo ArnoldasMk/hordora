@@ -92,14 +92,13 @@
 # corner_radius = 10             # clip window corners to this radius
 # default_mode = "client"        # decoration mode for windows without a rule.
                                  # "client":     CSD — client draws its own titlebar (default)
-                                 # "server":     SSD — driftwm draws a titlebar with close button
                                  # "borderless": SSD — no titlebar, just shadow + corners
                                  # "none":       SSD — bare client surface, no chrome
                                  #
-                                 # Note: "server" works best with apps that honor xdg-decoration
-                                 # (terminals, mpv, native Qt). Many GTK apps ignore the SSD hint
-                                 # and keep drawing their own titlebar — you'll get a misaligned
-                                 # double titlebar. For those, use "borderless" instead.
+                                 # "server" (driftwm titlebar) is intentionally not allowed as a
+                                 # global default: many toolkits (GTK, Electron) ignore
+                                 # xdg-decoration and keep drawing CSD, producing a misaligned
+                                 # double titlebar. Use it per-app via [[window_rules]] instead.
 
 [effects]
 # blur_radius = 2                # number of Kawase down+up passes (default: 2)
