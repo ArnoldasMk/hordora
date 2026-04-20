@@ -808,6 +808,93 @@ impl DriftWm {
             .cloned()
     }
 
+    /// Sync an X11 toplevel's X11-root position to its compositor screen
+    /// position (`canvas_loc - camera`). Without this, X11 windows larger
+    /// than the X11 root (= wl_output bounding box) get pointer events
+    /// clamped to root edges, producing dead zones in the surface periphery.
+    /// XWayland computes the absolute X11 pointer position as
+    /// `drawable_x + event_x` and the X server clamps to root bounds; making
+    /// `drawable_x = window_screen_x` cancels out the clamp at zoom = 1.0.
+    /// No-op for OR surfaces, unmapped windows, or unchanged positions.
+    pub fn sync_x11_position(&self, window: &Window) {
+        let Some(x11) = window.x11_surface() else { return };
+        if x11.is_override_redirect() {
+            return;
+        }
+        let Some(canvas_loc) = self.space.element_location(window) else { return };
+        let Some(output) = self.active_output() else { return };
+        let camera = output_state(&output).camera;
+        let new_loc: Point<i32, Logical> = (
+            canvas_loc.x - camera.x.round() as i32,
+            canvas_loc.y - camera.y.round() as i32,
+        )
+            .into();
+        let geo = x11.geometry();
+        if geo.loc == new_loc {
+            return;
+        }
+        let _ = x11.configure(Rectangle::new(new_loc, geo.size));
+    }
+
+    /// Sync X11 root positions for every X11 toplevel in `space`. Call after
+    /// the camera moves so visible X11 windows keep cursor events unclamped.
+    pub fn sync_all_x11_positions(&self) {
+        let windows: Vec<Window> = self
+            .space
+            .elements()
+            .filter(|w| w.x11_surface().is_some())
+            .cloned()
+            .collect();
+        for w in &windows {
+            self.sync_x11_position(w);
+        }
+    }
+
+    /// Re-anchor an X11 window's X11-root position so the cursor's surface
+    /// coord lands near the root center, only when the cursor would
+    /// otherwise be clamped (its computed X11 absolute coord is outside
+    /// root bounds with a margin). Complements `sync_x11_position` for
+    /// zoom levels where cursor canvas reach exceeds the X11 root size.
+    /// Called from pointer-focus dispatch with the live cursor canvas pos.
+    pub fn nudge_x11_root_for_cursor(
+        &self,
+        wl_surface: &WlSurface,
+        cursor_canvas: Point<f64, Logical>,
+    ) {
+        let Some(x11) = self.find_x11_surface_by_wl(wl_surface) else { return };
+        if x11.is_override_redirect() {
+            return;
+        }
+        let Some(window) = self.find_x11_window(&x11) else { return };
+        let Some(canvas_loc) = self.space.element_location(&window) else { return };
+        let Some(output) = self.active_output() else { return };
+        let root_size = output_logical_size(&output);
+        let surface_x = cursor_canvas.x - canvas_loc.x as f64;
+        let surface_y = cursor_canvas.y - canvas_loc.y as f64;
+        let geo = x11.geometry();
+        let cursor_root_x = (geo.loc.x as f64 + surface_x).round() as i32;
+        let cursor_root_y = (geo.loc.y as f64 + surface_y).round() as i32;
+        // Margin keeps a buffer before clamping kicks in, so we don't
+        // re-configure on every pixel of motion near the edges.
+        const MARGIN: i32 = 64;
+        let in_bounds = cursor_root_x >= MARGIN
+            && cursor_root_x < root_size.w - MARGIN
+            && cursor_root_y >= MARGIN
+            && cursor_root_y < root_size.h - MARGIN;
+        if in_bounds {
+            return;
+        }
+        let new_loc: Point<i32, Logical> = (
+            root_size.w / 2 - surface_x.round() as i32,
+            root_size.h / 2 - surface_y.round() as i32,
+        )
+            .into();
+        if new_loc == geo.loc {
+            return;
+        }
+        let _ = x11.configure(Rectangle::new(new_loc, geo.size));
+    }
+
     /// Raise the X11 window owning `wl_surface` to the top of XWayland's
     /// internal stack — *only* on the X11 side, never touches compositor
     /// visual stacking. Called from pointer-focus dispatch so hover events
@@ -1306,6 +1393,9 @@ impl DriftWm {
         }
         if changed {
             self.render.blur_camera_generation += 1;
+            // Re-anchor X11 root positions so cursor events stay unclamped
+            // for windows larger than the X11 root after the camera moves.
+            self.sync_all_x11_positions();
         }
     }
 

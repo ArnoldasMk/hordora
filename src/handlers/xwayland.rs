@@ -116,15 +116,15 @@ impl XwmHandler for DriftWm {
             self.cascade_position(centered, &smithay_window)
         };
 
-        // Only send configure if no rule size was applied (avoids redundant call)
-        if rule.as_ref().is_none_or(|r| r.size.is_none()) {
-            window.configure(Rectangle::from_size(geo.size)).ok();
-        }
-
         let activate = rule.as_ref().is_none_or(|r| !r.widget);
         self.space.map_element(smithay_window.clone(), pos, activate);
         self.space.raise_element(&smithay_window, true);
         self.enforce_below_windows();
+        // Place the X11 window in X11-root space at its compositor screen
+        // position. Subsumes the previous `Rectangle::from_size` initial
+        // configure (which left the window at root (0,0) and broke pointer
+        // routing for windows larger than the X11 root).
+        self.sync_x11_position(&smithay_window);
         // Focus, decorations, and applied_rule storage are deferred to
         // surface_associated(), which fires once the wl_surface is paired.
     }
@@ -258,8 +258,12 @@ impl XwmHandler for DriftWm {
             });
             if is_resizing {
                 let new_loc = loc + smithay::utils::Point::from((dx, dy));
-                self.space.map_element(smithay_window, new_loc, false);
+                self.space.map_element(smithay_window.clone(), new_loc, false);
             }
+            // Re-establish root_pos = canvas - camera. For resize this is a
+            // no-op (client's request already matches); for self-repositioning
+            // apps it overrides the client's chosen root coords (we own them).
+            self.sync_x11_position(&smithay_window);
         }
     }
 

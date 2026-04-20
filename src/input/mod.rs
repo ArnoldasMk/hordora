@@ -269,6 +269,7 @@ impl DriftWm {
         if let Some((ref focus, _)) = under {
             self.pointer_over_layer = false;
             self.raise_x11_for_hover(&focus.0);
+            self.nudge_x11_root_for_cursor(&focus.0, canvas_pos);
             pointer.motion(self, under, &MotionEvent { location: canvas_pos, serial, time });
             pointer.frame(self);
             self.update_decoration_cursor(canvas_pos);
@@ -288,6 +289,7 @@ impl DriftWm {
         if let Some((ref focus, _)) = under {
             self.pointer_over_layer = false;
             self.raise_x11_for_hover(&focus.0);
+            self.nudge_x11_root_for_cursor(&focus.0, canvas_pos);
             pointer.motion(self, under, &MotionEvent { location: canvas_pos, serial, time });
             pointer.frame(self);
             self.update_decoration_cursor(canvas_pos);

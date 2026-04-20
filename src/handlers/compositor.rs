@@ -326,6 +326,7 @@ impl CompositorHandler for DriftWm {
                         };
                         let activate = rule.as_ref().is_none_or(|r| !r.widget);
                         self.space.map_element(window.clone(), pos, activate);
+                        self.sync_x11_position(&window);
                     }
 
                     if let Some(toplevel) = window.toplevel() {
@@ -449,6 +450,7 @@ impl CompositorHandler for DriftWm {
                             (target_center.y - total_h as f64 / 2.0) as i32 + bar,
                         ));
                         self.space.map_element(window.clone(), new_loc, false);
+                        self.sync_x11_position(&window);
                         self.pending_recenter.remove(&root.id());
                     }
                 }
@@ -678,6 +680,7 @@ impl DriftWm {
         }
 
         self.space.map_element(window.clone(), new_loc, false);
+        self.sync_x11_position(window);
 
         // If we're waiting for the final commit, go idle
         if matches!(resize_state, ResizeState::WaitingForLastCommit { .. }) {
