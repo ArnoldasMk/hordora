@@ -1,5 +1,5 @@
-use crate::state::{DriftWm, FocusTarget};
-use driftwm::window_ext::WindowExt;
+use crate::state::{Hordora, FocusTarget};
+use hordora::window_ext::WindowExt;
 use smithay::{
     delegate_xwayland_shell,
     desktop::Window,
@@ -47,7 +47,7 @@ fn x11_edge_to_xdg(edge: ResizeEdge) -> xdg_toplevel::ResizeEdge {
 }
 
 
-impl XwmHandler for DriftWm {
+impl XwmHandler for Hordora {
     fn xwm_state(&mut self, _xwm: XwmId) -> &mut X11Wm {
         self.x11_wm.as_mut().expect("X11Wm not started")
     }
@@ -86,6 +86,7 @@ impl XwmHandler for DriftWm {
         {
             // Rule coords: window-center, Y-up. Convert to canvas: top-left, Y-down.
             (x - geo.size.w / 2, -y - geo.size.h / 2)
+        } else {
             self.cursor_place_position(
                 (geo.size.w, geo.size.h),
                 &smithay_window,
@@ -294,7 +295,7 @@ impl XwmHandler for DriftWm {
             output,
             last_clamped_location: pointer.current_location(),
             last_x11_configure: None,
-            snap: driftwm::snap::SnapState::default(),
+            snap: hordora::snap::SnapState::default(),
         };
         pointer.set_grab(self, grab, serial, Focus::Clear);
     }
@@ -303,7 +304,7 @@ impl XwmHandler for DriftWm {
         let Some(smithay_window) = self.find_x11_window(&window) else { return };
         let Some(wl_surface) = smithay_window.wl_surface().map(|s| s.into_owned()) else { return };
 
-        if driftwm::config::applied_rule(&wl_surface).is_some_and(|r| r.widget) {
+        if hordora::config::applied_rule(&wl_surface).is_some_and(|r| r.widget) {
             return;
         }
 
@@ -401,7 +402,7 @@ impl XwmHandler for DriftWm {
     }
 }
 
-impl XWaylandShellHandler for DriftWm {
+impl XWaylandShellHandler for Hordora {
     fn xwayland_shell_state(&mut self) -> &mut XWaylandShellState {
         &mut self.xwayland_shell_state
     }
@@ -424,26 +425,26 @@ impl XWaylandShellHandler for DriftWm {
         let title = surface.title();
         let rule = self.config.match_window_rule(&class, &title).cloned();
         if let Some(ref rule) = rule {
-            let applied = driftwm::config::AppliedWindowRule::from(rule);
+            let applied = hordora::config::AppliedWindowRule::from(rule);
             with_states(&wl_surface, |states| {
                 states.data_map.insert_if_missing_threadsafe(|| {
                     std::sync::Mutex::new(applied.clone())
                 });
-                *states.data_map.get::<std::sync::Mutex<driftwm::config::AppliedWindowRule>>()
+                *states.data_map.get::<std::sync::Mutex<hordora::config::AppliedWindowRule>>()
                     .unwrap().lock().unwrap() = applied;
             });
         }
 
         // SSD decorations: title bar widget is created only for `Server` mode.
         // For Client mode we still respect MOTIF hints (existing X11 fallback).
-        let effective = driftwm::config::effective_decoration_mode(
+        let effective = hordora::config::effective_decoration_mode(
             rule.as_ref().and_then(|r| r.decoration.as_ref()),
             &self.config.decorations.default_mode,
         );
         let wants_titlebar = match effective {
-            driftwm::config::DecorationMode::Server => true,
-            driftwm::config::DecorationMode::Borderless | driftwm::config::DecorationMode::None => false,
-            driftwm::config::DecorationMode::Client => smithay_window.wants_ssd(),
+            hordora::config::DecorationMode::Server => true,
+            hordora::config::DecorationMode::Borderless | hordora::config::DecorationMode::None => false,
+            hordora::config::DecorationMode::Client => smithay_window.wants_ssd(),
         };
 
         if wants_titlebar {
@@ -477,15 +478,15 @@ impl XWaylandShellHandler for DriftWm {
     }
 }
 
-delegate_xwayland_shell!(DriftWm);
+delegate_xwayland_shell!(Hordora);
 
 use smithay::delegate_xwayland_keyboard_grab;
 use smithay::wayland::xwayland_keyboard_grab::XWaylandKeyboardGrabHandler;
 
-impl XWaylandKeyboardGrabHandler for DriftWm {
+impl XWaylandKeyboardGrabHandler for Hordora {
     fn keyboard_focus_for_xsurface(&self, surface: &WlSurface) -> Option<FocusTarget> {
         self.find_x11_surface_by_wl(surface)
             .map(|_| FocusTarget(surface.clone()))
     }
 }
-delegate_xwayland_keyboard_grab!(DriftWm);
+delegate_xwayland_keyboard_grab!(Hordora);

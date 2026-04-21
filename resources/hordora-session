@@ -1,11 +1,11 @@
 #!/bin/sh
-# driftwm-session — launched by display manager (GDM) instead of bare driftwm.
+# hordora-session — launched by display manager (GDM) instead of bare hordora.
 # Re-execs through login shell to pick up .profile / PAM env vars,
 # then imports the full environment into systemd/D-Bus so services like
 # gnome-keyring (PAM-unlocked by GDM) are visible to all activated units.
 
-if [ -z "$_DRIFTWM_WRAPPER" ]; then
-    export _DRIFTWM_WRAPPER=1
+if [ -z "$_HORDORA_WRAPPER" ]; then
+    export _HORDORA_WRAPPER=1
     exec "$SHELL" -l -c "$0 $@"
 fi
 
@@ -24,9 +24,9 @@ hash dbus-update-activation-environment 2>/dev/null && \
 systemctl --user start graphical-session-pre.target
 systemctl --user start graphical-session.target
 
-# Run driftwm with logs captured for debugging.
-DRIFTWM_LOG="${XDG_RUNTIME_DIR:-/tmp}/driftwm.log"
-driftwm 2>"$DRIFTWM_LOG"
+# Run hordora with logs captured for debugging.
+HORDORA_LOG="${XDG_RUNTIME_DIR:-/tmp}/hordora.log"
+hordora 2>"$HORDORA_LOG"
 STATUS=$?
 
 # Compositor exited — tear down the graphical session so dependent

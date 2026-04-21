@@ -1,6 +1,6 @@
 [Desktop Entry]
-Name=driftwm
+Name=hordora
 Comment=A trackpad-first infinite canvas Wayland compositor
-Exec=driftwm-session
+Exec=hordora-session
 Type=Application
-DesktopNames=driftwm;wlroots
+DesktopNames=hordora;wlroots

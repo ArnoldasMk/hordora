@@ -1,7 +1,7 @@
-# driftwm configuration
-# Copy to ~/.config/driftwm/config.toml and uncomment what you want to change.
+# hordora configuration
+# Copy to ~/.config/hordora/config.toml and uncomment what you want to change.
 # Missing fields use built-in defaults. Invalid entries are logged and skipped.
-# Run `driftwm --check-config` to validate without starting the compositor.
+# Run `hordora --check-config` to validate without starting the compositor.
 
 # Window manager modifier key: "super" (default) or "alt"
 # mod_key = "super"
@@ -95,7 +95,7 @@
                                  # "borderless": SSD — no titlebar, just shadow + corners
                                  # "none":       SSD — bare client surface, no chrome
                                  #
-                                 # "server" (driftwm titlebar) is intentionally not allowed as a
+                                 # "server" (hordora titlebar) is intentionally not allowed as a
                                  # global default: many toolkits (GTK, Electron) ignore
                                  # xdg-decoration and keep drawing CSD, producing a misaligned
                                  # double titlebar. Use it per-app via [[window_rules]] instead.
@@ -108,9 +108,9 @@
 # Hardware stability quirks. All default to false (opt-in).
 # Enable these if you experience flickering, crashes, or rendering issues.
 # Particularly useful on NVIDIA GPUs with proprietary drivers.
-# Note: These flags must be set before launching driftwm. Changing them requires a restart.
+# Note: These flags must be set before launching hordora. Changing them requires a restart.
 # For additional NVIDIA-specific settings, set these environment variables in your
-# session wrapper script or shell profile before starting driftwm:
+# session wrapper script or shell profile before starting hordora:
 #   export SMITHAY_USE_LEGACY=1          # Use legacy DRM API instead of atomic modesetting
 #   export __GL_GSYNC_ALLOWED=0
 #   export __GL_VRR_ALLOWED=0
@@ -130,8 +130,8 @@
 
 [background]
 # Examples:
-# # shader_path = "~/.config/driftwm/bg.glsl"   # custom GLSL fragment shader
-# # tile_path = "~/.config/driftwm/tile.png"     # tiled image (mutually exclusive with shader)
+# # shader_path = "~/.config/hordora/bg.glsl"   # custom GLSL fragment shader
+# # tile_path = "~/.config/hordora/tile.png"     # tiled image (mutually exclusive with shader)
 #
 # Custom shaders receive these uniforms:
 # - u_camera: vec2 - camera position in canvas coordinates
@@ -293,7 +293,7 @@
 # "mod+3-finger-hold" = "center-window"
 
 # Per-output configuration. Each [[outputs]] entry matches by connector name.
-# Find connector names with wlr-randr or check driftwm logs at startup.
+# Find connector names with wlr-randr or check hordora logs at startup.
 # Outputs without a matching entry default to scale 1.0.
 # Winit backend ignores [[outputs]] entries.
 #
@@ -312,7 +312,7 @@
 
 # Window rules: match windows by app_id and/or title and apply overrides.
 # At least one of app_id or title is required. Both support * glob.
-# To find an app's app_id: cat $XDG_RUNTIME_DIR/driftwm/state (see "windows=" line)
+# To find an app's app_id: cat $XDG_RUNTIME_DIR/hordora/state (see "windows=" line)
 #
 # Fields:
 #   app_id     — app_id to match (optional, supports * glob)
@@ -323,8 +323,8 @@
 #   decoration  — overrides [decorations] default_mode for matched windows.
 #                 Omit to inherit default_mode. Values:
 #                 client:     CSD — client's own titlebar
-#                 server:     SSD — driftwm's titlebar
-#                 borderless: SSD — no titlebar, but driftwm's shadow + corner clip
+#                 server:     SSD — hordora's titlebar
+#                 borderless: SSD — no titlebar, but hordora's shadow + corner clip
 #                 none:       SSD — completely bare, no chrome at all
 #   blur        — true: blur background behind this window (default: false)
 #   opacity     — 0.0–1.0: window transparency (default: 1.0, fully opaque)

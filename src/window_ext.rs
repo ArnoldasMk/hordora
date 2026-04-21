@@ -5,7 +5,7 @@ use smithay::wayland::shell::xdg::ToplevelSurface;
 
 /// Set all four Tiled states on the toplevel's pending state. niri trick:
 /// GTK and other toolkits read Tiled as "drop your shadow + rounded corners"
-/// even if they ignore xdg-decoration. driftwm draws uniform shadow + corners
+/// even if they ignore xdg-decoration. hordora draws uniform shadow + corners
 /// on every window, so client chrome would just collide with ours.
 ///
 /// Caveat: Tiled also affects how some clients pick a default size — SCTK-based

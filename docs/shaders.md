@@ -1,6 +1,6 @@
 # Writing background shaders
 
-driftwm renders the canvas background using a GLSL fragment shader. You can
+hordora renders the canvas background using a GLSL fragment shader. You can
 write your own to replace the default dot grid.
 
 ## How it works
@@ -19,7 +19,7 @@ The result covers the entire output behind all windows.
 | `size`     | `vec2`  | Output dimensions in pixels (e.g. 1920.0, 1080.0) |
 | `alpha`    | `float` | Element opacity, normally 1.0                     |
 
-### Custom (provided by driftwm)
+### Custom (provided by hordora)
 
 | Name       | Type    | Description                               |
 | ---------- | ------- | ----------------------------------------- |
@@ -76,7 +76,7 @@ void main() {
   `floor()`/`fract()` internally are naturally resilient since the hash
   functions wrap.
 - **Animated shaders**: `u_time` gives seconds since compositor start, enabling
-  time-driven animations. driftwm re-renders every frame when a shader uses
+  time-driven animations. hordora re-renders every frame when a shader uses
   `u_time` — declare it in your shader and it will animate continuously.
 - **Colors as constants**: Define colors, spacing, and other tunables as
   GLSL `const` values at the top of your shader. This keeps everything in
@@ -102,12 +102,12 @@ re-read from disk on every reload, so touch the config to pick up shader
 edits:
 
 ```bash
-touch ~/.config/driftwm/config.toml
+touch ~/.config/hordora/config.toml
 ```
 
 To bind this to a key, add to your config:
 
 ```toml
 [keybindings]
-"mod+shift+c" = "spawn touch ~/.config/driftwm/config.toml"
+"mod+shift+c" = "spawn touch ~/.config/hordora/config.toml"
 ```

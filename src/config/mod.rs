@@ -168,7 +168,7 @@ impl Config {
         Ok(Self::from_raw(raw))
     }
 
-    /// Load config from `$XDG_CONFIG_HOME/driftwm/config.toml` (or `~/.config/driftwm/config.toml`).
+    /// Load config from `$XDG_CONFIG_HOME/hordora/config.toml` (or `~/.config/hordora/config.toml`).
     /// Missing file → all defaults. Parse failure → error log + all defaults.
     pub fn load() -> Self {
         let config_path = config_path();

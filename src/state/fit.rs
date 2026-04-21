@@ -5,9 +5,9 @@ use smithay::{
     wayland::{compositor::with_states, seat::WaylandFocus},
 };
 
-use driftwm::config;
-use driftwm::window_ext::WindowExt;
-use super::{DriftWm, PendingRecenter};
+use hordora::config;
+use hordora::window_ext::WindowExt;
+use super::{Hordora, PendingRecenter};
 
 /// Per-window fit state stored in the surface data_map via Mutex.
 /// Some(size) = currently fit, holding the pre-fit size.
@@ -77,7 +77,7 @@ pub fn set_restore_size_if_missing(wl_surface: &WlSurface, size: Size<i32, Logic
     });
 }
 
-impl DriftWm {
+impl Hordora {
     pub fn fit_window(&mut self, window: &Window) {
         let Some(wl_surface) = window.wl_surface() else { return };
         if config::applied_rule(&wl_surface).is_some_and(|r| r.widget) {
@@ -193,5 +193,51 @@ impl DriftWm {
         } else {
             self.fit_window(window);
         }
+    }
+
+    /// Resize window to fill the visible viewport at the current zoom/camera.
+    /// Toggles: pressing again restores the original size.
+    pub fn fill_viewport_window(&mut self, window: &Window) {
+        if is_fit(window) {
+            self.unfit_window(window);
+            return;
+        }
+
+        let Some(wl_surface) = window.wl_surface() else { return };
+        if config::applied_rule(&wl_surface).is_some_and(|r| r.widget) {
+            return;
+        }
+
+        let current_size = window.geometry().size;
+
+        with_states(&wl_surface, |states| {
+            states
+                .data_map
+                .insert_if_missing_threadsafe(|| std::sync::Mutex::new(FitState(None)));
+            if let Some(m) = states.data_map.get::<std::sync::Mutex<FitState>>()
+                && let Ok(mut guard) = m.lock()
+            {
+                guard.0 = Some(current_size);
+            }
+        });
+
+        let usable = self.get_usable_area();
+        let gap = self.config.snap_gap;
+        let bar = self.window_ssd_bar(window);
+        let camera = self.camera();
+        let zoom = self.zoom();
+
+        let target_w = ((usable.size.w as f64 - 2.0 * gap) / zoom) as i32;
+        let target_h = ((usable.size.h as f64 - 2.0 * gap) / zoom) as i32 - bar;
+        let target_size = Size::from((target_w.max(1), target_h.max(1)));
+
+        let loc_x = (camera.x + (usable.loc.x as f64 + gap) / zoom) as i32;
+        let loc_y = (camera.y + (usable.loc.y as f64 + gap) / zoom) as i32 + bar;
+
+        window.enter_fit_configure(target_size);
+        self.space.map_element(window.clone(), Point::from((loc_x, loc_y)), false);
+
+        let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+        self.raise_and_focus(window, serial);
     }
 }

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch all driftwm dashboard widgets as Alacritty terminals.
+# Launch all hordora dashboard widgets as Alacritty terminals.
 # Each gets its own app_id for window rule matching.
 
 DIR="$(cd "$(dirname "$0")" && pwd)"

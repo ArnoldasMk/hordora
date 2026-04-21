@@ -2,9 +2,9 @@
 
 ## Project
 
-**hordora** — a fork of [driftwm](https://github.com/niceguydave/driftwm), a trackpad-first infinite canvas Wayland compositor written in Rust. Windows float on an unbounded 2D plane navigated via trackpad gestures (pan, zoom, pinch). No workspaces, no tiling. Built on [smithay](https://github.com/Smithay/smithay).
+**hordora** — a fork of [hordora](https://github.com/niceguydave/hordora), a trackpad-first infinite canvas Wayland compositor written in Rust. Windows float on an unbounded 2D plane navigated via trackpad gestures (pan, zoom, pinch). No workspaces, no tiling. Built on [smithay](https://github.com/Smithay/smithay).
 
-The upstream crate name is still `driftwm` (used in Cargo.toml and all `use driftwm::` imports). This fork lives at `~/projektai/hordora`.
+The upstream crate name is still `hordora` (used in Cargo.toml and all `use hordora::` imports). This fork lives at `~/projektai/hordora`.
 
 The project is launched (v0.1.x). See `docs/DESIGN.md` for the full specification and `docs/CAVEATS.md` for architectural pitfalls.
 
@@ -15,7 +15,7 @@ The project is launched (v0.1.x). See `docs/DESIGN.md` for the full specificatio
 ## Conventions
 
 - Documentation files (except README.md) live in `docs/`.
-- Config path: `~/.config/driftwm/config.toml` (respects `XDG_CONFIG_HOME`).
+- Config path: `~/.config/hordora/config.toml` (respects `XDG_CONFIG_HOME`).
 
 ## Code Style
 
@@ -46,7 +46,7 @@ Use podman to test builds on other distros (Docker Desktop is flaky on Fedora):
 
 ```bash
 # Arch Linux
-podman run --rm -it --security-opt label=disable -v ~/Documents/work/scripts/driftwm:/src archlinux:latest bash
+podman run --rm -it --security-opt label=disable -v ~/Documents/work/scripts/hordora:/src archlinux:latest bash
 pacman -Syu --noconfirm rust cargo pkg-config libdisplay-info libinput seatd mesa libxkbcommon
 cd /src && cargo build
 ```
@@ -64,7 +64,7 @@ Current source layout:
 
 - `main.rs` — entry point (CLI args, backend selection), `lib.rs` — crate root (module declarations)
 - `backend/` — `mod.rs` (Backend enum: Winit/Udev + renderer accessor), `winit.rs` (winit backend init + ~60fps timer render loop), `udev.rs` (udev/DRM backend init + VBlank-driven render loop, libseat session, libinput, hotplug)
-- `state/` — `mod.rs` (DriftWm struct, FullscreenState, ClientState), `animation.rs` (camera/zoom/momentum/edge-pan animation, key repeat), `navigation.rs` (navigate_to_window, focus history, MRU cycle), `fullscreen.rs` (enter/exit fullscreen, pointer remap), `fit.rs` (per-window fit-to-viewport toggle, pre-fit size restore)
+- `state/` — `mod.rs` (Hordora struct, FullscreenState, ClientState), `animation.rs` (camera/zoom/momentum/edge-pan animation, key repeat), `navigation.rs` (navigate_to_window, focus history, MRU cycle), `fullscreen.rs` (enter/exit fullscreen, pointer remap), `fit.rs` (per-window fit-to-viewport toggle, pre-fit size restore)
 - `config/` — `mod.rs` (Config struct, load/parse, context-aware lookup methods), `types.rs` (Action, Direction, Modifiers, KeyCombo, MouseBinding/MouseTrigger/MouseAction, GestureBinding/GestureTrigger, ContinuousAction/ThresholdAction, ContextBindings, BindingContext), `parse.rs` (string→type parsers for combos/actions/gestures), `defaults.rs` (default key/mouse/gesture bindings per context, terminal/launcher detection), `toml.rs` (serde structs, config path)
 - `canvas.rs` — coordinate transforms (ScreenPos/CanvasPos), camera math, cone search, zoom helpers (zoom_to_fit, zoom_anchor_camera, snap_zoom, dynamic_min_zoom)
 - `focus.rs` — FocusTarget(WlSurface) newtype with KeyboardTarget/PointerTarget/TouchTarget impls

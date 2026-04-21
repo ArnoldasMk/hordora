@@ -1,13 +1,13 @@
-<h1 align="center"><img alt="driftwm" src="assets/logo.jpg" width="500"></h1>
+<h1 align="center"><img alt="hordora" src="assets/logo.jpg" width="500"></h1>
 <p align="center">A trackpad-first infinite canvas Wayland compositor.</p>
 <p align="center">
-    <a href="https://github.com/malbiruk/driftwm/blob/main/LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
-    <a href="https://github.com/malbiruk/driftwm/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/malbiruk/driftwm?logo=github"></a>
+    <a href="https://github.com/malbiruk/hordora/blob/main/LICENSE"><img alt="License: GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue"></a>
+    <a href="https://github.com/malbiruk/hordora/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/malbiruk/hordora?logo=github"></a>
 </p>
 
 https://github.com/user-attachments/assets/df24e442-6ad0-4520-9491-cb666da06d05
 
-Traditional window managers arrange windows to fit your screen. driftwm flips this: windows float on an infinite 2D canvas and you move the viewport around them. Designed with laptops in mind — trackpad support keeps getting better while display size stays limited, so treating your screen as a camera onto a larger canvas makes sense. Pan, zoom, and navigate with trackpad gestures. No workspaces, no tiling — just drift.
+Traditional window managers arrange windows to fit your screen. hordora flips this: windows float on an infinite 2D canvas and you move the viewport around them. Designed with laptops in mind — trackpad support keeps getting better while display size stays limited, so treating your screen as a camera onto a larger canvas makes sense. Pan, zoom, and navigate with trackpad gestures. No workspaces, no tiling — just drift.
 
 Built on [smithay](https://github.com/Smithay/smithay). Inspired by [vxwm](https://codeberg.org/wh1tepearl/vxwm), [hevel](https://git.sr.ht/~dlm/hevel), and [niri](https://github.com/YaLTeR/niri).
 
@@ -109,8 +109,8 @@ infinitely across the canvas). Both are infinite by nature.
 
 ```toml
 [background]
-shader_path = "~/.config/driftwm/bg.glsl"    # custom shader
-# tile_path = "~/.config/driftwm/tile.png"   # or tiled image
+shader_path = "~/.config/hordora/bg.glsl"    # custom shader
+# tile_path = "~/.config/hordora/tile.png"   # or tiled image
 ```
 
 ### Window rules
@@ -141,7 +141,7 @@ widget = true
 decoration = "none"
 ```
 
-> **Tip:** to find a window's `app_id`, check `$XDG_RUNTIME_DIR/driftwm/state` —
+> **Tip:** to find a window's `app_id`, check `$XDG_RUNTIME_DIR/hordora/state` —
 > the `windows` field lists all open windows by their app ID.
 
 ### Multi-monitor
@@ -187,7 +187,7 @@ window-search script that lets you search and jump to any open window.
 ### Fedora (prebuilt binary)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/malbiruk/driftwm/main/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/malbiruk/hordora/main/install.sh | sudo sh
 ```
 
 Installs the binary, session wrapper, desktop entry, and shader wallpapers.
@@ -197,7 +197,7 @@ anything is missing. To uninstall, run with `sudo sh -s uninstall`.
 ### Arch Linux (AUR)
 
 ```bash
-yay -S driftwm
+yay -S hordora
 ```
 
 ### NixOS / Nix
@@ -216,16 +216,16 @@ cargo build
 cargo run
 ```
 
-To add driftwm as a session in your NixOS config:
+To add hordora as a session in your NixOS config:
 
 ```nix
 let
-  driftwm-flake = builtins.getFlake "github:malbiruk/driftwm";
-  driftwm = driftwm-flake.packages.x86_64-linux.default;
+  hordora-flake = builtins.getFlake "github:malbiruk/hordora";
+  hordora = hordora-flake.packages.x86_64-linux.default;
 in
 {
-  services.displayManager.sessionPackages = [ driftwm ];
-  environment.systemPackages = [ driftwm ];
+  services.displayManager.sessionPackages = [ hordora ];
+  environment.systemPackages = [ hordora ];
 }
 ```
 
@@ -255,17 +255,17 @@ sudo pacman -S libdisplay-info libinput seatd mesa libxkbcommon
 > [rustup](https://rustup.rs/) instead of `apt install rustc`.
 
 ```bash
-git clone https://github.com/malbiruk/driftwm.git
-cd driftwm
+git clone https://github.com/malbiruk/hordora.git
+cd hordora
 cargo build --release
 sudo make install
 ```
 
 ### Running
 
-driftwm auto-detects whether it's running nested (inside an existing Wayland
-session) or on real hardware (from a TTY). Just run `driftwm`. For display
-manager integration, select "driftwm" from the session menu.
+hordora auto-detects whether it's running nested (inside an existing Wayland
+session) or on real hardware (from a TTY). Just run `hordora`. For display
+manager integration, select "hordora" from the session menu.
 
 ## Quick start
 
@@ -294,16 +294,16 @@ All keybindings are configurable — see [`config.example.toml`](config.example.
 
 ## Configuration
 
-Config file: `~/.config/driftwm/config.toml` (respects `XDG_CONFIG_HOME`).
+Config file: `~/.config/hordora/config.toml` (respects `XDG_CONFIG_HOME`).
 
 ```bash
-mkdir -p ~/.config/driftwm
-cp /etc/driftwm/config.toml ~/.config/driftwm/config.toml
+mkdir -p ~/.config/hordora
+cp /etc/hordora/config.toml ~/.config/hordora/config.toml
 ```
 
 Missing file uses built-in defaults. Partial configs merge with defaults —
 only specify what you want to change. Use `"none"` to unbind a default binding.
-Validate without starting: `driftwm --check-config`.
+Validate without starting: `hordora --check-config`.
 
 ```toml
 # Launch programs at startup
@@ -318,7 +318,7 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the full compositor design specificatio
 
 ## Example setup
 
-driftwm is just a compositor — everything else is standard Wayland tooling.
+hordora is just a compositor — everything else is standard Wayland tooling.
 Here are some tools that work well with it:
 
 - **waybar** — Status bar / taskbar
@@ -332,14 +332,14 @@ Here are some tools that work well with it:
 - **wlr-randr / wdisplays** — Output configuration
 - **COSMIC Settings** — Wi-Fi, Bluetooth, sound (or nm-applet + blueman + pavucontrol)
 
-The [`extras/`](extras/) directory contains a complete setup — driftwm config,
+The [`extras/`](extras/) directory contains a complete setup — hordora config,
 GLSL shader wallpapers, Python widgets (clock, calendar, system stats, power
 menu), waybar with taskbar/tray, fuzzel window-search script, and window rules
 tying it all together. Use it as a starting point or steal pieces.
 
 ## Community tools
 
-- [driftwm-settings](https://github.com/wwmaxik/driftwm-settings) — GTK4 GUI config editor
+- [hordora-settings](https://github.com/wwmaxik/hordora-settings) — GTK4 GUI config editor
 
 ## Contributing
 

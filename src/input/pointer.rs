@@ -19,14 +19,14 @@ use smithay::{
 use smithay::wayland::seat::WaylandFocus;
 
 use smithay::reexports::wayland_server::Resource;
-use driftwm::canvas::{self, CanvasPos, canvas_to_screen};
-use driftwm::config::{self, Action, BindingContext, MouseAction};
-use driftwm::window_ext::WindowExt;
+use hordora::canvas::{self, CanvasPos, canvas_to_screen};
+use hordora::config::{self, Action, BindingContext, MouseAction};
+use hordora::window_ext::WindowExt;
 use crate::decorations::DecorationHit;
 use crate::grabs::{MoveSurfaceGrab, NavigateGrab, PanGrab, ResizeState, ResizeSurfaceGrab};
-use crate::state::{DriftWm, FocusTarget, PendingMiddleClick};
+use crate::state::{Hordora, FocusTarget, PendingMiddleClick};
 
-impl DriftWm {
+impl Hordora {
     /// Determine the binding context for the current pointer position.
     pub(super) fn pointer_context(&self, pos: Point<f64, smithay::utils::Logical>) -> BindingContext {
         let over_window = self.space.element_under(pos).is_some();
@@ -108,7 +108,7 @@ impl DriftWm {
                 let timer = Timer::from_duration(Duration::from_millis(
                     super::gestures::DOUBLE_TAP_WINDOW_MS,
                 ));
-                if let Ok(token) = self.loop_handle.insert_source(timer, |_, _, data: &mut DriftWm| {
+                if let Ok(token) = self.loop_handle.insert_source(timer, |_, _, data: &mut Hordora| {
                     data.flush_pending_middle_click();
                     TimeoutAction::Drop
                 }) {
@@ -361,7 +361,7 @@ impl DriftWm {
     /// otherwise infer edges from pointer position within the window.
     pub(super) fn start_compositor_resize(
         &mut self,
-        pointer: &smithay::input::pointer::PointerHandle<DriftWm>,
+        pointer: &smithay::input::pointer::PointerHandle<Hordora>,
         window: &smithay::desktop::Window,
         pos: Point<f64, smithay::utils::Logical>,
         button: u32,
@@ -372,7 +372,7 @@ impl DriftWm {
 
     pub(super) fn start_compositor_resize_with_edge(
         &mut self,
-        pointer: &smithay::input::pointer::PointerHandle<DriftWm>,
+        pointer: &smithay::input::pointer::PointerHandle<Hordora>,
         window: &smithay::desktop::Window,
         pos: Point<f64, smithay::utils::Logical>,
         button: u32,
@@ -427,7 +427,7 @@ impl DriftWm {
             output,
             last_clamped_location: pos,
             last_x11_configure: None,
-            snap: driftwm::snap::SnapState::default(),
+            snap: hordora::snap::SnapState::default(),
         };
         pointer.set_grab(self, grab, serial, Focus::Clear);
     }

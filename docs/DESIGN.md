@@ -1,4 +1,4 @@
-# driftwm
+# hordora
 
 A trackpad-first infinite canvas Wayland compositor.
 
@@ -103,9 +103,9 @@ on the `Output` object):
 - last_scroll_pan, momentum, panning, edge_pan_velocity
 - frame_counter, last_frame_instant, last_rendered_camera
 - layout_position, home_return
-- cached_bg_element (keyed by output name on DriftWm)
-- fullscreen (keyed by Output on DriftWm)
-- lock_surface (keyed by Output on DriftWm)
+- cached_bg_element (keyed by output name on Hordora)
+- fullscreen (keyed by Output on Hordora)
+- lock_surface (keyed by Output on Hordora)
 
 Everything else is global: space, seat, config, focus_history, decorations,
 protocol states, gesture state, cursor state.
@@ -486,14 +486,14 @@ Config example:
 
 ```toml
 [background]
-shader_path = "~/.config/driftwm/bg.frag"      # omit for built-in dot grid
-# tile_path = "~/.config/driftwm/tile.png"     # alternative: tiled image
+shader_path = "~/.config/hordora/bg.frag"      # omit for built-in dot grid
+# tile_path = "~/.config/hordora/tile.png"     # alternative: tiled image
 ```
 
 ## Configuration
 
-Config file: `~/.config/driftwm/config.toml` (respects `XDG_CONFIG_HOME`).
-Validate without starting: `driftwm --check-config`.
+Config file: `~/.config/hordora/config.toml` (respects `XDG_CONFIG_HOME`).
+Validate without starting: `hordora --check-config`.
 
 Missing fields use built-in defaults. Partial configs merge with defaults —
 only specify what you want to change. Use `"none"` to unbind a default binding.
@@ -519,7 +519,7 @@ QT_WAYLAND_DISABLE_WINDOWDECORATION = "1"
 MOZ_ENABLE_WAYLAND = "1"
 ```
 
-The compositor also sets `XDG_SESSION_TYPE=wayland`, `XDG_CURRENT_DESKTOP=driftwm`,
+The compositor also sets `XDG_SESSION_TYPE=wayland`, `XDG_CURRENT_DESKTOP=hordora`,
 `XCURSOR_THEME`, `XCURSOR_SIZE`, and Wayland toolkit hints automatically.
 
 ### Trackpad / libinput
@@ -646,7 +646,7 @@ All external — compositor delegates to standard Wayland tools.
 | `crystal-dock` | Dock / taskbar                       |
 | `swaylock`     | Lock screen (`ext-session-lock`)     |
 
-Waybar modules: canvas x,y,z from driftwm, clock/date, keyboard layout,
+Waybar modules: canvas x,y,z from hordora, clock/date, keyboard layout,
 swaync integration, logout menu.
 
 ## Theming / integration
@@ -673,9 +673,9 @@ Development loop:
 
 ```bash
 # From your GNOME Wayland session:
-cargo run                        # opens driftwm as a window on your desktop
+cargo run                        # opens hordora as a window on your desktop
 # Inside that window, apps think they're on a real compositor
-WAYLAND_DISPLAY=wayland-1 foot   # open a terminal inside driftwm
+WAYLAND_DISPLAY=wayland-1 foot   # open a terminal inside hordora
 ```
 
 ### Limitations of nested mode

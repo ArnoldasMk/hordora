@@ -97,7 +97,7 @@ def _set_volume(pct: int) -> None:
 # ── Caffeine (swayidle toggle) ─────────────────────────────
 
 _LOCK_SH = str(
-    Path("~/Documents/work/scripts/driftwm/extras/scripts/lock.sh").expanduser(),
+    Path("~/Documents/work/scripts/hordora/extras/scripts/lock.sh").expanduser(),
 )
 SWAYIDLE_CMD = [
     "swayidle",

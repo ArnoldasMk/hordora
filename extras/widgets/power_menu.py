@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Power menu TUI for driftwm. Navigate with arrows/jk/mouse, Enter/click to select, q/Esc to close."""
+"""Power menu TUI for hordora. Navigate with arrows/jk/mouse, Enter/click to select, q/Esc to close."""
 
 import os
 import select
@@ -120,7 +120,7 @@ def execute(action: str) -> None:
     elif action == "suspend":
         subprocess.run(["systemctl", "suspend"], check=False)
     elif action == "logout":
-        subprocess.run(["pkill", "-x", "driftwm"], check=False)
+        subprocess.run(["pkill", "-x", "hordora"], check=False)
     elif action == "reboot":
         subprocess.run(["systemctl", "reboot"], check=False)
     elif action == "poweroff":

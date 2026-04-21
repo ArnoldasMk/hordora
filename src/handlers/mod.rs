@@ -3,8 +3,8 @@ pub mod layer_shell;
 pub mod xdg_shell;
 pub mod xwayland;
 
-use crate::state::{DriftWm, FocusTarget};
-use driftwm::window_ext::WindowExt;
+use crate::state::{Hordora, FocusTarget};
+use hordora::window_ext::WindowExt;
 use smithay::wayland::seat::WaylandFocus;
 use std::os::fd::OwnedFd;
 use smithay::{
@@ -55,7 +55,7 @@ use smithay::{
     },
 };
 
-impl SeatHandler for DriftWm {
+impl SeatHandler for Hordora {
     type KeyboardFocus = FocusTarget;
     type PointerFocus = FocusTarget;
     type TouchFocus = FocusTarget;
@@ -112,9 +112,9 @@ impl SeatHandler for DriftWm {
     }
 }
 
-delegate_seat!(DriftWm);
+delegate_seat!(Hordora);
 
-impl SelectionHandler for DriftWm {
+impl SelectionHandler for Hordora {
     type SelectionUserData = ();
 
     fn new_selection(&mut self, ty: SelectionTarget, source: Option<SelectionSource>, _seat: Seat<Self>) {
@@ -132,13 +132,13 @@ impl SelectionHandler for DriftWm {
     }
 }
 
-impl DataDeviceHandler for DriftWm {
+impl DataDeviceHandler for Hordora {
     fn data_device_state(&mut self) -> &mut DataDeviceState {
         &mut self.data_device_state
     }
 }
 
-impl WaylandDndGrabHandler for DriftWm {
+impl WaylandDndGrabHandler for Hordora {
     fn dnd_requested<S: dnd::Source>(
         &mut self,
         source: S,
@@ -164,19 +164,19 @@ impl WaylandDndGrabHandler for DriftWm {
         }
     }
 }
-impl dnd::DndGrabHandler for DriftWm {}
+impl dnd::DndGrabHandler for Hordora {}
 
-delegate_data_device!(DriftWm);
+delegate_data_device!(Hordora);
 
-impl OutputHandler for DriftWm {}
+impl OutputHandler for Hordora {}
 
-delegate_output!(DriftWm);
+delegate_output!(Hordora);
 
-impl TabletSeatHandler for DriftWm {}
+impl TabletSeatHandler for Hordora {}
 
-delegate_cursor_shape!(DriftWm);
+delegate_cursor_shape!(Hordora);
 
-impl DmabufHandler for DriftWm {
+impl DmabufHandler for Hordora {
     fn dmabuf_state(&mut self) -> &mut DmabufState {
         &mut self.dmabuf_state
     }
@@ -192,24 +192,24 @@ impl DmabufHandler for DriftWm {
             return;
         };
         if backend.renderer().import_dmabuf(&dmabuf, None).is_ok() {
-            let _ = notifier.successful::<DriftWm>();
+            let _ = notifier.successful::<Hordora>();
         } else {
             notifier.failed();
         }
     }
 }
 
-delegate_dmabuf!(DriftWm);
+delegate_dmabuf!(Hordora);
 
-delegate_viewporter!(DriftWm);
+delegate_viewporter!(Hordora);
 
-impl FractionalScaleHandler for DriftWm {
+impl FractionalScaleHandler for Hordora {
     fn new_fractional_scale(&mut self, _surface: WlSurface) {}
 }
 
-delegate_fractional_scale!(DriftWm);
+delegate_fractional_scale!(Hordora);
 
-impl XdgActivationHandler for DriftWm {
+impl XdgActivationHandler for Hordora {
     fn activation_state(&mut self) -> &mut XdgActivationState {
         &mut self.xdg_activation_state
     }
@@ -257,7 +257,7 @@ impl XdgActivationHandler for DriftWm {
                 return;
             }
             let mostly_visible = self.space.element_location(&window).is_some_and(|loc| {
-                driftwm::canvas::visible_fraction(
+                hordora::canvas::visible_fraction(
                     loc,
                     window.geometry().size,
                     self.camera(),
@@ -275,25 +275,25 @@ impl XdgActivationHandler for DriftWm {
     }
 }
 
-delegate_xdg_activation!(DriftWm);
+delegate_xdg_activation!(Hordora);
 
-impl PrimarySelectionHandler for DriftWm {
+impl PrimarySelectionHandler for Hordora {
     fn primary_selection_state(&mut self) -> &mut PrimarySelectionState {
         &mut self.primary_selection_state
     }
 }
 
-delegate_primary_selection!(DriftWm);
+delegate_primary_selection!(Hordora);
 
-impl DataControlHandler for DriftWm {
+impl DataControlHandler for Hordora {
     fn data_control_state(&mut self) -> &mut DataControlState {
         &mut self.data_control_state
     }
 }
 
-delegate_data_control!(DriftWm);
+delegate_data_control!(Hordora);
 
-impl PointerConstraintsHandler for DriftWm {
+impl PointerConstraintsHandler for Hordora {
     fn new_constraint(&mut self, _surface: &WlSurface, _pointer: &PointerHandle<Self>) {
         self.maybe_activate_pointer_constraint();
     }
@@ -326,12 +326,12 @@ impl PointerConstraintsHandler for DriftWm {
     }
 }
 
-delegate_pointer_constraints!(DriftWm);
+delegate_pointer_constraints!(Hordora);
 
-delegate_relative_pointer!(DriftWm);
-delegate_pointer_gestures!(DriftWm);
+delegate_relative_pointer!(Hordora);
+delegate_pointer_gestures!(Hordora);
 
-impl KeyboardShortcutsInhibitHandler for DriftWm {
+impl KeyboardShortcutsInhibitHandler for Hordora {
     fn keyboard_shortcuts_inhibit_state(
         &mut self,
     ) -> &mut smithay::wayland::keyboard_shortcuts_inhibit::KeyboardShortcutsInhibitState {
@@ -357,9 +357,9 @@ impl KeyboardShortcutsInhibitHandler for DriftWm {
     fn inhibitor_destroyed(&mut self, _inhibitor: KeyboardShortcutsInhibitor) {}
 }
 
-delegate_keyboard_shortcuts_inhibit!(DriftWm);
+delegate_keyboard_shortcuts_inhibit!(Hordora);
 
-impl SecurityContextHandler for DriftWm {
+impl SecurityContextHandler for Hordora {
     fn context_created(
         &mut self,
         source: SecurityContextListenerSource,
@@ -382,46 +382,46 @@ impl SecurityContextHandler for DriftWm {
         }
     }
 }
-delegate_security_context!(DriftWm);
-delegate_virtual_keyboard_manager!(DriftWm);
+delegate_security_context!(Hordora);
+delegate_virtual_keyboard_manager!(Hordora);
 
-impl IdleInhibitHandler for DriftWm {
+impl IdleInhibitHandler for Hordora {
     fn inhibit(&mut self, _surface: WlSurface) {}
     fn uninhibit(&mut self, _surface: WlSurface) {}
 }
 
-delegate_idle_inhibit!(DriftWm);
+delegate_idle_inhibit!(Hordora);
 
 use smithay::delegate_idle_notify;
 use smithay::wayland::idle_notify::{IdleNotifierHandler, IdleNotifierState};
 
-impl IdleNotifierHandler for DriftWm {
+impl IdleNotifierHandler for Hordora {
     fn idle_notifier_state(&mut self) -> &mut IdleNotifierState<Self> {
         &mut self.idle_notifier_state
     }
 }
-delegate_idle_notify!(DriftWm);
+delegate_idle_notify!(Hordora);
 
-delegate_presentation!(DriftWm);
-delegate_single_pixel_buffer!(DriftWm);
+delegate_presentation!(Hordora);
+delegate_single_pixel_buffer!(Hordora);
 
 use smithay::delegate_xdg_foreign;
 use smithay::wayland::xdg_foreign::{XdgForeignHandler, XdgForeignState};
 
-impl XdgForeignHandler for DriftWm {
+impl XdgForeignHandler for Hordora {
     fn xdg_foreign_state(&mut self) -> &mut XdgForeignState {
         &mut self.xdg_foreign_state
     }
 }
-delegate_xdg_foreign!(DriftWm);
+delegate_xdg_foreign!(Hordora);
 
 use smithay::delegate_content_type;
-delegate_content_type!(DriftWm);
+delegate_content_type!(Hordora);
 
 use smithay::delegate_xdg_dialog;
 use smithay::wayland::shell::xdg::dialog::XdgDialogHandler;
 
-impl XdgDialogHandler for DriftWm {
+impl XdgDialogHandler for Hordora {
     fn dialog_hint_changed(&mut self, toplevel: ToplevelSurface, hint: smithay::wayland::shell::xdg::dialog::ToplevelDialogHint) {
         if hint == smithay::wayland::shell::xdg::dialog::ToplevelDialogHint::Modal {
             // Redirect focus from parent to this modal dialog
@@ -434,15 +434,15 @@ impl XdgDialogHandler for DriftWm {
         }
     }
 }
-delegate_xdg_dialog!(DriftWm);
+delegate_xdg_dialog!(Hordora);
 
 use smithay::delegate_xdg_decoration;
 use smithay::wayland::shell::xdg::ToplevelSurface;
 use smithay::wayland::shell::xdg::decoration::XdgDecorationHandler;
 
-pub use driftwm::window_ext::{decoration_mode_to_wire, set_tiled_states, unset_tiled_states};
+pub use hordora::window_ext::{decoration_mode_to_wire, set_tiled_states, unset_tiled_states};
 
-impl XdgDecorationHandler for DriftWm {
+impl XdgDecorationHandler for Hordora {
     fn new_decoration(&mut self, toplevel: ToplevelSurface) {
         // Advertise the global default mode. Per-window rules override this in the
         // commit handler once app_id is known.
@@ -467,21 +467,21 @@ impl XdgDecorationHandler for DriftWm {
         });
         toplevel.send_configure();
 
-        // Decide whether this client gets a driftwm title bar:
+        // Decide whether this client gets a hordora title bar:
         //   - Explicit rule decoration → only `Server` gets a bar.
         //   - No explicit rule → defer to default_mode, but fall back to
         //     creating a bar when default is `Client` and the client itself
         //     asked for SSD (Alacritty / no-CSD apps need *some* chrome).
         let wl_surface = toplevel.wl_surface().clone();
-        let applied = driftwm::config::applied_rule(&wl_surface);
+        let applied = hordora::config::applied_rule(&wl_surface);
         let rule_explicit = applied.as_ref().and_then(|a| a.decoration.as_ref()).cloned();
         let create_titlebar = match rule_explicit {
-            Some(driftwm::config::DecorationMode::Server) => true,
+            Some(hordora::config::DecorationMode::Server) => true,
             Some(_) => false,
             None => matches!(
                 (&mode, &self.config.decorations.default_mode),
-                (Mode::ServerSide, driftwm::config::DecorationMode::Client)
-                    | (_, driftwm::config::DecorationMode::Server)
+                (Mode::ServerSide, hordora::config::DecorationMode::Client)
+                    | (_, hordora::config::DecorationMode::Server)
             ),
         };
 
@@ -520,11 +520,11 @@ impl XdgDecorationHandler for DriftWm {
     }
 }
 
-delegate_xdg_decoration!(DriftWm);
+delegate_xdg_decoration!(Hordora);
 
-use driftwm::protocols::foreign_toplevel::{ForeignToplevelHandler, ForeignToplevelManagerState};
+use hordora::protocols::foreign_toplevel::{ForeignToplevelHandler, ForeignToplevelManagerState};
 
-impl ForeignToplevelHandler for DriftWm {
+impl ForeignToplevelHandler for Hordora {
     fn foreign_toplevel_manager_state(&mut self) -> &mut ForeignToplevelManagerState {
         &mut self.foreign_toplevel_state
     }
@@ -595,11 +595,11 @@ impl ForeignToplevelHandler for DriftWm {
     }
 }
 
-driftwm::delegate_foreign_toplevel!(DriftWm);
+hordora::delegate_foreign_toplevel!(Hordora);
 
-use driftwm::protocols::screencopy::{Screencopy, ScreencopyHandler, ScreencopyManagerState};
+use hordora::protocols::screencopy::{Screencopy, ScreencopyHandler, ScreencopyManagerState};
 
-impl ScreencopyHandler for DriftWm {
+impl ScreencopyHandler for Hordora {
     fn frame(&mut self, screencopy: Screencopy) {
         self.pending_screencopies.push(screencopy);
     }
@@ -609,15 +609,15 @@ impl ScreencopyHandler for DriftWm {
     }
 }
 
-driftwm::delegate_screencopy!(DriftWm);
+hordora::delegate_screencopy!(Hordora);
 
-driftwm::delegate_image_capture_source!(DriftWm);
+hordora::delegate_image_capture_source!(Hordora);
 
-use driftwm::protocols::image_copy_capture::{
+use hordora::protocols::image_copy_capture::{
     ImageCopyCaptureHandler, ImageCopyCaptureState, PendingCapture,
 };
 
-impl ImageCopyCaptureHandler for DriftWm {
+impl ImageCopyCaptureHandler for Hordora {
     fn image_copy_capture_state(&mut self) -> &mut ImageCopyCaptureState {
         &mut self.image_copy_capture_state
     }
@@ -627,13 +627,13 @@ impl ImageCopyCaptureHandler for DriftWm {
     }
 }
 
-driftwm::delegate_image_copy_capture!(DriftWm);
+hordora::delegate_image_copy_capture!(Hordora);
 
-use driftwm::protocols::output_management::{
+use hordora::protocols::output_management::{
     OutputManagementHandler, OutputManagementState, RequestedHeadConfig,
 };
 
-impl OutputManagementHandler for DriftWm {
+impl OutputManagementHandler for Hordora {
     fn output_management_state(&mut self) -> &mut OutputManagementState {
         &mut self.output_management_state
     }
@@ -670,7 +670,7 @@ impl OutputManagementHandler for DriftWm {
     }
 }
 
-driftwm::delegate_output_management!(DriftWm);
+hordora::delegate_output_management!(Hordora);
 
 use crate::state::SessionLock;
 use smithay::delegate_session_lock;
@@ -678,7 +678,7 @@ use smithay::wayland::session_lock::{
     LockSurface, SessionLockHandler, SessionLockManagerState, SessionLocker,
 };
 
-impl SessionLockHandler for DriftWm {
+impl SessionLockHandler for Hordora {
     fn lock_state(&mut self) -> &mut SessionLockManagerState {
         &mut self.session_lock_manager_state
     }
@@ -746,4 +746,4 @@ impl SessionLockHandler for DriftWm {
     }
 }
 
-delegate_session_lock!(DriftWm);
+delegate_session_lock!(Hordora);

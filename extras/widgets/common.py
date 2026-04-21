@@ -1,4 +1,4 @@
-"""Shared helpers for driftwm dashboard widgets."""
+"""Shared helpers for hordora dashboard widgets."""
 
 import json
 import os
@@ -366,9 +366,9 @@ def get_weather() -> dict | None:
 
 
 def read_state_file() -> dict[str, str]:
-    """Read driftwm state from $XDG_RUNTIME_DIR/driftwm/state."""
+    """Read hordora state from $XDG_RUNTIME_DIR/hordora/state."""
     runtime_dir = Path(environ_get("XDG_RUNTIME_DIR", ""))
-    path = runtime_dir / "driftwm" / "state"
+    path = runtime_dir / "hordora" / "state"
     result = {}
     try:
         for line in path.read_text().splitlines():
@@ -550,9 +550,9 @@ def poll_click(timeout: float) -> tuple[int, int] | None:
 
 
 def read_keyboard_layout() -> str:
-    """Read keyboard layout from driftwm config."""
+    """Read keyboard layout from hordora config."""
     config_dir = Path(environ_get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
-    config_path = config_dir / "driftwm" / "config.toml"
+    config_path = config_dir / "hordora" / "config.toml"
     try:
         for line in config_path.read_text().splitlines():
             stripped = line.strip()

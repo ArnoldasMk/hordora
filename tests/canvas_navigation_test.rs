@@ -1,5 +1,5 @@
-use driftwm::canvas::{camera_to_center_window, find_nearest};
-use driftwm::config::Direction;
+use hordora::canvas::{camera_to_center_window, find_nearest};
+use hordora::config::Direction;
 use smithay::utils::{Logical, Point, Size};
 use std::f64::consts::FRAC_1_SQRT_2;
 

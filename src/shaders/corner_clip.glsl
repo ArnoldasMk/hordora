@@ -6,7 +6,7 @@
 //
 // Port of niri's clipped_surface.frag + rounding_alpha.frag
 // (https://github.com/niri-wm/niri), combined into one file.
-// Licensed GPL-3.0 (matches driftwm).
+// Licensed GPL-3.0 (matches hordora).
 //_DEFINES_
 
 #if defined(EXTERNAL)

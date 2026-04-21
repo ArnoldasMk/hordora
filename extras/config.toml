@@ -1,4 +1,4 @@
-# driftwm — personal config (symlink to ~/.config/driftwm/config.toml)
+# hordora — personal config (symlink to ~/.config/hordora/config.toml)
 
 autostart = [
     "eval $(gnome-keyring-daemon --start --components=secrets,ssh) && systemctl --user import-environment SSH_AUTH_SOCK GNOME_KEYRING_CONTROL && dbus-update-activation-environment SSH_AUTH_SOCK GNOME_KEYRING_CONTROL",
@@ -8,9 +8,9 @@ autostart = [
      "waybar -c ~/.config/waybar/taskbar.jsonc -s ~/.config/waybar/taskbar.css",
      "sleep 1 && waybar -c ~/.config/waybar/tray.jsonc -s ~/.config/waybar/tray.css",
      "vorta -d",
-     "~/Documents/work/scripts/driftwm/extras/widgets/launch.sh",
-     "~/Documents/work/scripts/driftwm/extras/scripts/battery_notify.sh",
-     "swayidle -w timeout 300 'brightnessctl -s set 10%' resume 'brightnessctl -r' timeout 330 '~/Documents/work/scripts/driftwm/extras/scripts/lock.sh' timeout 600 'systemctl suspend' before-sleep '~/Documents/work/scripts/driftwm/extras/scripts/lock.sh'",
+     "~/Documents/work/scripts/hordora/extras/widgets/launch.sh",
+     "~/Documents/work/scripts/hordora/extras/scripts/battery_notify.sh",
+     "swayidle -w timeout 300 'brightnessctl -s set 10%' resume 'brightnessctl -r' timeout 330 '~/Documents/work/scripts/hordora/extras/scripts/lock.sh' timeout 600 'systemctl suspend' before-sleep '~/Documents/work/scripts/hordora/extras/scripts/lock.sh'",
 ]
 
 focus_follows_mouse = true
@@ -30,7 +30,7 @@ bg_color = "#FDF6E3"
 fg_color = "#5C6A72"
 
 [background]
-shader_path = "/usr/local/share/driftwm/wallpapers/pink_cloud.glsl"
+shader_path = "/usr/local/share/hordora/wallpapers/pink_cloud.glsl"
 
 [output.outline]
 color="#FDF6E3"
@@ -41,7 +41,7 @@ right = "spawn jgmenu_run"
 [keybindings]
 "mod+return" = "exec ptyxis -s"
 "mod+d" = "exec fuzzel"
-"mod+l" = "spawn ~/Documents/work/scripts/driftwm/extras/scripts/lock.sh"
+"mod+l" = "spawn ~/Documents/work/scripts/hordora/extras/scripts/lock.sh"
 "mod+n" = "spawn swaync-client -t"
 # swayosd instead of default wpctl/brightnessctl
 "XF86AudioRaiseVolume" = "spawn swayosd-client --output-volume raise"
@@ -49,7 +49,7 @@ right = "spawn jgmenu_run"
 "XF86AudioMute" = "spawn swayosd-client --output-volume mute-toggle"
 "XF86MonBrightnessUp" = "spawn swayosd-client --brightness raise"
 "XF86MonBrightnessDown" = "spawn swayosd-client --brightness lower"
-"mod+s" = "exec ~/Documents/work/scripts/driftwm/extras/scripts/window-search.sh"
+"mod+s" = "exec ~/Documents/work/scripts/hordora/extras/scripts/window-search.sh"
 
 [gestures.on-window]
 "alt+2-finger-pinch-in" = "close-window"

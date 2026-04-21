@@ -27,14 +27,14 @@ fn get_capture_state<'a>(
 
 /// Fulfill pending screencopy requests by rendering to offscreen textures.
 pub fn render_screencopy(
-    state: &mut crate::state::DriftWm,
+    state: &mut crate::state::Hordora,
     renderer: &mut GlesRenderer,
     output: &Output,
     elements: &[OutputRenderElements],
 ) {
     use smithay::backend::renderer::{ExportMem, Renderer};
     use smithay::wayland::shm;
-    use driftwm::protocols::screencopy::ScreencopyBuffer;
+    use hordora::protocols::screencopy::ScreencopyBuffer;
     use std::ptr;
 
     // Extract only requests for this output, keep the rest
@@ -261,7 +261,7 @@ fn render_to_dmabuf(
 
 /// Fulfill pending ext-image-copy-capture frames by rendering to offscreen textures.
 pub fn render_capture_frames(
-    state: &mut crate::state::DriftWm,
+    state: &mut crate::state::Hordora,
     renderer: &mut GlesRenderer,
     output: &Output,
     elements: &[OutputRenderElements],
@@ -387,7 +387,7 @@ pub fn render_capture_frames(
             capture.frame.presentation_time(tv_sec_hi, tv_sec_lo, tv_nsec);
             capture.frame.ready();
 
-            let frame_data = capture.frame.data::<std::sync::Mutex<driftwm::protocols::image_copy_capture::CaptureFrameData>>();
+            let frame_data = capture.frame.data::<std::sync::Mutex<hordora::protocols::image_copy_capture::CaptureFrameData>>();
             if let Some(fd) = frame_data {
                 let fd = fd.lock().unwrap();
                 state.image_copy_capture_state.frame_done(&fd.session);

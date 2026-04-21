@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest! driftwm is experimental and primarily an AI-assisted learning project, but PRs and issues are welcome.
+Thanks for your interest! hordora is experimental and primarily an AI-assisted learning project, but PRs and issues are welcome.
 
 ## Before you start
 
@@ -19,5 +19,5 @@ When changes bundle multiple concerns, merging becomes all-or-nothing — if I l
 Include:
 - What you expected vs what happened
 - Steps to reproduce
-- Distro, GPU, nested vs TTY, driftwm version
+- Distro, GPU, nested vs TTY, hordora version
 - `RUST_LOG=debug` logs if relevant

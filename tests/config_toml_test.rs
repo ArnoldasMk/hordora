@@ -1,4 +1,4 @@
-use driftwm::config::{
+use hordora::config::{
     Action, BTN_RIGHT, BindingContext, Config, ContinuousAction, GestureConfigEntry,
     GestureTrigger, MouseAction,
 };

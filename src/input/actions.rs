@@ -3,12 +3,12 @@ use smithay::{
     utils::{Point, Size, SERIAL_COUNTER},
 };
 
-use driftwm::canvas::{self};
-use driftwm::config::Action;
-use driftwm::window_ext::WindowExt;
-use crate::state::{DriftWm, FocusTarget, HomeReturn};
+use hordora::canvas::{self};
+use hordora::config::Action;
+use hordora::window_ext::WindowExt;
+use crate::state::{Hordora, FocusTarget, HomeReturn};
 
-impl DriftWm {
+impl Hordora {
     pub fn execute_action(&mut self, action: &Action) {
         // Snapshot fullscreen window before the guard exits it.
         // Also check gesture_exited_fullscreen (set by exit_fullscreen_for_gesture
@@ -356,6 +356,11 @@ impl DriftWm {
             Action::FitWindow => {
                 if let Some(window) = self.focused_window().filter(|w| !w.is_widget()) {
                     self.toggle_fit_window(&window);
+                }
+            }
+            Action::FillViewport => {
+                if let Some(window) = self.focused_window().filter(|w| !w.is_widget()) {
+                    self.fill_viewport_window(&window);
                 }
             }
             Action::SendToOutput(dir) => {

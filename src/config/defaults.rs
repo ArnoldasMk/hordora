@@ -243,6 +243,13 @@ pub(super) fn default_bindings(mod_key: ModKey, cycle_mod: CycleModifier) -> Has
         ),
         (
             KeyCombo {
+                modifiers: m.clone(),
+                sym: Keysym::from(keysyms::KEY_backslash),
+            },
+            Action::FillViewport,
+        ),
+        (
+            KeyCombo {
                 modifiers: Modifiers {
                     ctrl: true,
                     shift: true,

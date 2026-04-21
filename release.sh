@@ -1,23 +1,23 @@
 #!/bin/sh
-# Build a release tarball for driftwm.
+# Build a release tarball for hordora.
 # Usage: ./release.sh
-# Produces: driftwm-<version>-x86_64-linux.tar.gz
+# Produces: hordora-<version>-x86_64-linux.tar.gz
 
 set -e
 
 VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
-ARCHIVE="driftwm-${VERSION}-x86_64-linux.tar.gz"
-STAGING="driftwm-${VERSION}"
+ARCHIVE="hordora-${VERSION}-x86_64-linux.tar.gz"
+STAGING="hordora-${VERSION}"
 
 cargo build --release
 
 rm -rf "$STAGING"
 mkdir -p "$STAGING/wallpapers"
 
-cp target/release/driftwm "$STAGING/"
-cp resources/driftwm-session "$STAGING/"
-cp resources/driftwm.desktop "$STAGING/"
-cp resources/driftwm-portals.conf "$STAGING/"
+cp target/release/hordora "$STAGING/"
+cp resources/hordora-session "$STAGING/"
+cp resources/hordora.desktop "$STAGING/"
+cp resources/hordora-portals.conf "$STAGING/"
 cp config.example.toml "$STAGING/config.toml"
 cp extras/wallpapers/*.glsl "$STAGING/wallpapers/"
 

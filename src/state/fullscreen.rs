@@ -4,14 +4,14 @@ use smithay::{
     wayland::seat::WaylandFocus,
 };
 
-use driftwm::window_ext::WindowExt;
-use super::{DriftWm, FocusTarget, FullscreenState};
+use hordora::window_ext::WindowExt;
+use super::{Hordora, FocusTarget, FullscreenState};
 
-impl DriftWm {
+impl Hordora {
     /// Enter fullscreen for the given window: lock viewport, expand window to fill screen.
     pub fn enter_fullscreen(&mut self, window: &Window) {
         if window.wl_surface().as_ref()
-            .and_then(|s| driftwm::config::applied_rule(s))
+            .and_then(|s| hordora::config::applied_rule(s))
             .is_some_and(|r| r.widget)
         {
             return;

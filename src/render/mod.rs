@@ -43,7 +43,7 @@ use smithay::utils::IsAlive;
 use smithay::wayland::compositor::with_states;
 use smithay::wayland::seat::WaylandFocus;
 
-use driftwm::canvas::{self, CanvasPos, canvas_to_screen};
+use hordora::canvas::{self, CanvasPos, canvas_to_screen};
 
 /// Uniform declarations for background shaders.
 /// Shaders receive u_camera and u_time.
@@ -124,7 +124,7 @@ fn shadow_uniforms_precise(
     shadow_radius: f32,
     corner_radius_phys: f32,
 ) -> (Vec<Uniform<'static>>, ShadowPhysKey) {
-    use driftwm::config::DecorationConfig;
+    use hordora::config::DecorationConfig;
     let sc = DecorationConfig::SHADOW_COLOR;
     let zoom_scale = Scale::from(zoom);
 
@@ -217,7 +217,7 @@ pub fn compile_tile_bg_shader(renderer: &mut GlesRenderer) -> Option<GlesTexProg
 /// Build render elements for X11 override-redirect windows (menus, tooltips, splashes).
 /// Same camera/zoom math as managed windows.
 fn build_override_redirect_elements(
-    state: &crate::state::DriftWm,
+    state: &crate::state::Hordora,
     renderer: &mut GlesRenderer,
     output: &Output,
     camera: Point<f64, Logical>,
@@ -265,7 +265,7 @@ fn build_override_redirect_elements(
 /// Build render elements for canvas-positioned layer surfaces (zoomed like windows).
 /// Mirrors the window pipeline: position relative to camera, then RescaleRenderElement for zoom.
 pub fn build_canvas_layer_elements(
-    state: &crate::state::DriftWm,
+    state: &crate::state::Hordora,
     renderer: &mut GlesRenderer,
     output: &Output,
     camera: Point<f64, smithay::utils::Logical>,
@@ -312,7 +312,7 @@ fn build_layer_elements(
     output: &Output,
     renderer: &mut GlesRenderer,
     layer: WlrLayer,
-    blur_config: Option<(&driftwm::config::Config, bool, BlurLayer)>,
+    blur_config: Option<(&hordora::config::Config, bool, BlurLayer)>,
 ) -> (Vec<OutputRenderElements>, Vec<BlurRequestData>) {
     let map = layer_map_for_output(output);
     let output_scale = output.current_scale().fractional_scale();
@@ -360,7 +360,7 @@ fn build_layer_elements(
 /// `camera` and `zoom` are from the output being rendered.
 /// Returns `OutputRenderElements` — either xcursor memory buffers or client surface elements.
 pub fn build_cursor_elements(
-    state: &mut crate::state::DriftWm,
+    state: &mut crate::state::Hordora,
     renderer: &mut GlesRenderer,
     camera: Point<f64, smithay::utils::Logical>,
     zoom: f64,
@@ -414,7 +414,7 @@ pub fn build_cursor_elements(
 
 /// Build xcursor memory buffer elements for a named cursor icon.
 fn build_xcursor_elements(
-    state: &mut crate::state::DriftWm,
+    state: &mut crate::state::Hordora,
     renderer: &mut GlesRenderer,
     physical_pos: Point<f64, Physical>,
     name: &'static str,
@@ -466,7 +466,7 @@ fn build_xcursor_elements(
 /// Update the cached background shader element for the current camera/zoom.
 /// Returns (camera_moved, zoom_changed) for the caller's damage logic.
 pub fn update_background_element(
-    state: &mut crate::state::DriftWm,
+    state: &mut crate::state::Hordora,
     output: &Output,
     cur_camera: Point<f64, smithay::utils::Logical>,
     cur_zoom: f64,
@@ -513,7 +513,7 @@ pub fn update_background_element(
 /// Build render elements for a locked session: only the lock surface.
 /// No compositor cursor — the lock client manages its own visuals.
 fn compose_lock_frame(
-    state: &crate::state::DriftWm,
+    state: &crate::state::Hordora,
     renderer: &mut GlesRenderer,
     output: &Output,
     _cursor_elements: Vec<OutputRenderElements>,
@@ -606,7 +606,7 @@ fn push_plain_elements(
 /// Assemble all render elements for a frame.
 /// Caller provides cursor elements (built before taking the renderer).
 pub fn compose_frame(
-    state: &mut crate::state::DriftWm,
+    state: &mut crate::state::Hordora,
     renderer: &mut GlesRenderer,
     output: &Output,
     cursor_elements: Vec<OutputRenderElements>,
@@ -663,8 +663,8 @@ pub fn compose_frame(
         let mut bbox = window.bbox();
         bbox.loc += loc - geom_loc;
         if has_ssd {
-            let r = driftwm::config::DecorationConfig::SHADOW_RADIUS.ceil() as i32;
-            let bar = driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT;
+            let r = hordora::config::DecorationConfig::SHADOW_RADIUS.ceil() as i32;
+            let bar = hordora::config::DecorationConfig::TITLE_BAR_HEIGHT;
             bbox.loc.x -= r;
             bbox.loc.y -= bar + r;
             bbox.size.w += 2 * r;
@@ -676,7 +676,7 @@ pub fn compose_frame(
             loc.x as f64 - geom_loc.x as f64 - camera.x,
             loc.y as f64 - geom_loc.y as f64 - camera.y,
         ));
-        let applied = driftwm::config::applied_rule(&wl_surface);
+        let applied = hordora::config::applied_rule(&wl_surface);
         let is_widget = applied.as_ref().is_some_and(|r| r.widget);
         let wants_blur = blur_enabled && applied.as_ref().is_some_and(|r| r.blur);
         let opacity = applied.as_ref().and_then(|r| r.opacity).unwrap_or(1.0);
@@ -721,7 +721,7 @@ pub fn compose_frame(
         push_plain_elements(target, popup_elems, zoom);
 
         if has_ssd {
-            let bar_height = driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT;
+            let bar_height = hordora::config::DecorationConfig::TITLE_BAR_HEIGHT;
             let is_focused = focused_surface.as_ref().is_some_and(|f| *f == *wl_surface);
 
             // Update decoration state (re-render title bar if needed)
@@ -783,7 +783,7 @@ pub fn compose_frame(
             // Shadow element: cached per-window, rebuilt only on resize.
             // Stable Id lets the damage tracker skip unchanged shadow regions.
             if let Some(ref shader) = state.render.shadow_shader {
-                use driftwm::config::DecorationConfig;
+                use hordora::config::DecorationConfig;
                 let radius = DecorationConfig::SHADOW_RADIUS;
                 let r = radius.ceil() as i32;
                 let shadow_w = geom_size.w + 2 * r;
@@ -855,11 +855,11 @@ pub fn compose_frame(
             // Only `None` mode opts out of shadow + corner clipping.
             // Client (CSD), Borderless, and untagged windows all get the chrome —
             // any `Server` window would have taken the `has_ssd` branch above.
-            let effective = driftwm::config::effective_decoration_mode(
+            let effective = hordora::config::effective_decoration_mode(
                 applied.as_ref().and_then(|r| r.decoration.as_ref()),
                 &state.config.decorations.default_mode,
             );
-            let bare = matches!(effective, driftwm::config::DecorationMode::None);
+            let bare = matches!(effective, hordora::config::DecorationMode::None);
 
             if !bare && !is_fullscreen {
                 // Clip pixels outside the geometry rect even when radius=0,
@@ -880,7 +880,7 @@ pub fn compose_frame(
 
                 // Compositor shadow behind CSD windows
                 if let Some(ref shadow_shader) = state.render.shadow_shader {
-                    use driftwm::config::DecorationConfig;
+                    use hordora::config::DecorationConfig;
                     let shadow_radius = DecorationConfig::SHADOW_RADIUS;
                     let sr = shadow_radius.ceil() as i32;
                     let shadow_w = geom_size.w + 2 * sr;
@@ -949,7 +949,7 @@ pub fn compose_frame(
                 (render_loc.y * zoom) as i32,
             ));
             let screen_size: Size<i32, Logical> = if has_ssd {
-                let bar = driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT;
+                let bar = hordora::config::DecorationConfig::TITLE_BAR_HEIGHT;
                 (
                     (geom_size.w as f64 * zoom).ceil() as i32,
                     ((geom_size.h + bar) as f64 * zoom).ceil() as i32,
@@ -964,7 +964,7 @@ pub fn compose_frame(
                 if has_ssd {
                     Point::from((
                         screen_loc.x,
-                        screen_loc.y - (driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT as f64 * zoom) as i32,
+                        screen_loc.y - (hordora::config::DecorationConfig::TITLE_BAR_HEIGHT as f64 * zoom) as i32,
                     ))
                 } else {
                     // CSD windows: geometry starts at render_loc + geo.loc, not at render_loc
@@ -1095,7 +1095,7 @@ pub fn compose_frame(
 
 /// Draw thin outlines showing where other monitors' viewports sit on the canvas.
 fn build_output_outline_elements(
-    state: &crate::state::DriftWm,
+    state: &crate::state::Hordora,
     renderer: &mut GlesRenderer,
     output: &Output,
     camera: Point<f64, Logical>,
@@ -1194,7 +1194,7 @@ fn build_output_outline_elements(
 /// Compile background shader and/or load tile image.
 /// Called at startup and on config reload (lazy re-init).
 /// On failure, falls back to `DEFAULT_SHADER` — never leaves background uninitialized.
-pub fn init_background(state: &mut crate::state::DriftWm, renderer: &mut GlesRenderer, initial_size: Size<i32, smithay::utils::Logical>, output_name: &str) {
+pub fn init_background(state: &mut crate::state::Hordora, renderer: &mut GlesRenderer, initial_size: Size<i32, smithay::utils::Logical>, output_name: &str) {
     // Try loading tile image first (if configured and no shader_path)
     if state.config.background.shader_path.is_none()
         && let Some(path) = state.config.background.tile_path.as_deref()
@@ -1262,11 +1262,11 @@ pub fn init_background(state: &mut crate::state::DriftWm, renderer: &mut GlesRen
                 Ok(src) => src,
                 Err(e) => {
                     tracing::error!("Failed to read shader {path}: {e}, using default");
-                    driftwm::config::DEFAULT_SHADER.to_string()
+                    hordora::config::DEFAULT_SHADER.to_string()
                 }
             }
         } else {
-            driftwm::config::DEFAULT_SHADER.to_string()
+            hordora::config::DEFAULT_SHADER.to_string()
         };
 
         let compiled = match renderer.compile_custom_pixel_shader(&shader_source, BG_UNIFORMS) {
@@ -1274,7 +1274,7 @@ pub fn init_background(state: &mut crate::state::DriftWm, renderer: &mut GlesRen
             Err(e) => {
                 tracing::error!("Failed to compile shader: {e}, using default");
                 renderer
-                    .compile_custom_pixel_shader(driftwm::config::DEFAULT_SHADER, BG_UNIFORMS)
+                    .compile_custom_pixel_shader(hordora::config::DEFAULT_SHADER, BG_UNIFORMS)
                     .expect("Default shader must compile")
             }
         };
@@ -1302,11 +1302,11 @@ pub fn init_background(state: &mut crate::state::DriftWm, renderer: &mut GlesRen
 
 /// Sync foreign-toplevel protocol state with the current window list.
 /// Call once per frame iteration (not per-output).
-pub fn refresh_foreign_toplevels(state: &mut crate::state::DriftWm) {
+pub fn refresh_foreign_toplevels(state: &mut crate::state::Hordora) {
     let keyboard = state.seat.get_keyboard().unwrap();
     let focused = keyboard.current_focus().map(|f| f.0);
     let outputs: Vec<Output> = state.space.outputs().cloned().collect();
-    driftwm::protocols::foreign_toplevel::refresh::<crate::state::DriftWm>(
+    hordora::protocols::foreign_toplevel::refresh::<crate::state::Hordora>(
         &mut state.foreign_toplevel_state,
         &state.space,
         focused.as_ref(),
@@ -1315,7 +1315,7 @@ pub fn refresh_foreign_toplevels(state: &mut crate::state::DriftWm) {
 }
 
 /// Post-render: frame callbacks, space cleanup.
-pub fn post_render(state: &mut crate::state::DriftWm, output: &Output) {
+pub fn post_render(state: &mut crate::state::Hordora, output: &Output) {
     let time = state.start_time.elapsed();
 
     // Only send frame callbacks to visible windows — off-screen clients

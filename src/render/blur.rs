@@ -206,7 +206,7 @@ pub(crate) struct BlurRequestData {
 /// crop the window region, run Kawase blur passes, and insert the result.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn process_blur_requests(
-    state: &mut crate::state::DriftWm,
+    state: &mut crate::state::Hordora,
     renderer: &mut GlesRenderer,
     output: &Output,
     output_scale: f64,
@@ -225,7 +225,7 @@ pub(crate) fn process_blur_requests(
     let output_size: Size<i32, Physical> = logical_size.to_physical_precise_round(output_scale);
     let out_buf_size = output_size.to_logical(1).to_buffer(1, Transform::Normal);
 
-    // Shared full-output FBO for behind-content rendering — cached on DriftWm, reused if size matches
+    // Shared full-output FBO for behind-content rendering — cached on Hordora, reused if size matches
     let mut bg_tex = match state.render.blur_bg_fbo.take() {
         Some((tex, cached_size)) if cached_size == output_size => tex,
         _ => {

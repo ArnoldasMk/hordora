@@ -307,11 +307,11 @@ render_elements! {
 /// even when the client renders content into a subsurface (Firefox, apps
 /// with HW-accelerated video/GL).
 ///
-/// Port of niri's `ClippedSurfaceRenderElement`; simplified for driftwm's
+/// Port of niri's `ClippedSurfaceRenderElement`; simplified for hordora's
 /// single-radius decoration model (per-corner radii still supported so SSD
 /// can zero the top corners under the title bar). Matrix math is niri's,
 /// including the viewporter `src` correction. Non-`Normal` surface
-/// transforms fall back to passthrough (no clip applied) — no driftwm-
+/// transforms fall back to passthrough (no clip applied) — no hordora-
 /// supported client currently sets one, but silently clipping a rotated
 /// buffer would be visibly wrong.
 ///
@@ -516,7 +516,7 @@ impl RenderElement<GlesRenderer> for RoundedCornerElement {
         // The input_to_geo math doesn't compensate for non-identity buffer
         // transforms. For rotated/flipped surfaces we'd clip against the
         // wrong edges — fall back to the default tex program so at least
-        // the content is visible. No driftwm-supported client sets this
+        // the content is visible. No hordora-supported client sets this
         // today; if one starts to, port niri's transform matrix chain.
         if self.inner.transform() != Transform::Normal {
             return self.inner.draw(frame, src, dst, damage, opaque_regions, user_data);

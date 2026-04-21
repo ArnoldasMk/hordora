@@ -73,9 +73,9 @@ use smithay::reexports::drm::control::crtc;
 
 use crate::backend::Backend;
 use crate::input::gestures::GestureState;
-use driftwm::canvas::MomentumState;
-use driftwm::config::Config;
-use driftwm::window_ext::WindowExt;
+use hordora::canvas::MomentumState;
+use hordora::config::Config;
+use hordora::window_ext::WindowExt;
 
 /// A layer surface placed at a fixed canvas position (instead of screen-anchored via LayerMap).
 /// Created when a layer surface's namespace matches a window rule with `position`.
@@ -168,9 +168,9 @@ pub struct PendingRecenter {
 
 /// Per-output viewport state, stored on each `Output` via `UserDataMap`.
 /// Wrapped in `Mutex` since `UserDataMap` requires `Sync`.
-/// Fields that are !Send (PixelShaderElement) stay on DriftWm.
+/// Fields that are !Send (PixelShaderElement) stay on Hordora.
 /// Fields with non-Copy ownership types (fullscreen, lock_surface)
-/// stay on DriftWm for Phase 1 — moved here when multi-output needs them.
+/// stay on Hordora for Phase 1 — moved here when multi-output needs them.
 #[derive(Clone)]
 pub struct OutputState {
     pub camera: Point<f64, Logical>,
@@ -262,11 +262,11 @@ pub fn output_state(output: &Output) -> MutexGuard<'_, OutputState> {
 }
 
 /// Central compositor state.
-pub struct DriftWm {
+pub struct Hordora {
     // -- global: infrastructure --
     pub start_time: Instant,
     pub display_handle: DisplayHandle,
-    pub loop_handle: LoopHandle<'static, DriftWm>,
+    pub loop_handle: LoopHandle<'static, Hordora>,
     pub loop_signal: LoopSignal,
 
     // -- global: desktop --
@@ -280,11 +280,11 @@ pub struct DriftWm {
     pub shm_state: ShmState,
     #[allow(dead_code)]
     pub output_manager_state: OutputManagerState,
-    pub seat_state: SeatState<DriftWm>,
+    pub seat_state: SeatState<Hordora>,
     pub data_device_state: DataDeviceState,
 
     // -- global: input --
-    pub seat: Seat<DriftWm>,
+    pub seat: Seat<Hordora>,
 
     // -- global: cursor --
     pub cursor: CursorState,
@@ -324,21 +324,21 @@ pub struct DriftWm {
     pub security_context_state: SecurityContextState,
     #[allow(dead_code)]
     pub idle_inhibit_state: IdleInhibitManagerState,
-    pub idle_notifier_state: IdleNotifierState<DriftWm>,
+    pub idle_notifier_state: IdleNotifierState<Hordora>,
     #[allow(dead_code)]
     pub presentation_state: PresentationState,
     #[allow(dead_code)]
     pub decoration_state: XdgDecorationState,
     pub layer_shell_state: WlrLayerShellState,
-    pub foreign_toplevel_state: driftwm::protocols::foreign_toplevel::ForeignToplevelManagerState,
-    pub screencopy_state: driftwm::protocols::screencopy::ScreencopyManagerState,
-    pub output_management_state: driftwm::protocols::output_management::OutputManagementState,
-    pub pending_screencopies: Vec<driftwm::protocols::screencopy::Screencopy>,
+    pub foreign_toplevel_state: hordora::protocols::foreign_toplevel::ForeignToplevelManagerState,
+    pub screencopy_state: hordora::protocols::screencopy::ScreencopyManagerState,
+    pub output_management_state: hordora::protocols::output_management::OutputManagementState,
+    pub pending_screencopies: Vec<hordora::protocols::screencopy::Screencopy>,
     #[allow(dead_code)]
     pub image_capture_source_state:
-        driftwm::protocols::image_capture_source::ImageCaptureSourceState,
-    pub image_copy_capture_state: driftwm::protocols::image_copy_capture::ImageCopyCaptureState,
-    pub pending_captures: Vec<driftwm::protocols::image_copy_capture::PendingCapture>,
+        hordora::protocols::image_capture_source::ImageCaptureSourceState,
+    pub image_copy_capture_state: hordora::protocols::image_copy_capture::ImageCopyCaptureState,
+    pub pending_captures: Vec<hordora::protocols::image_copy_capture::PendingCapture>,
     pub xdg_foreign_state: XdgForeignState,
     pub session_lock_manager_state: SessionLockManagerState,
     pub session_lock: SessionLock,
@@ -368,7 +368,7 @@ pub struct DriftWm {
     pub cycle_state: Option<usize>,
 
     // -- global: key repeat --
-    pub held_action: Option<(u32, driftwm::config::Action, Instant)>,
+    pub held_action: Option<(u32, hordora::config::Action, Instant)>,
 
     // -- per-output: fullscreen (keyed by output, since FullscreenState has Window) --
     pub fullscreen: HashMap<Output, FullscreenState>,
@@ -486,10 +486,10 @@ pub(crate) fn client_is_unrestricted(
         .is_none_or(|d| !d.is_restricted)
 }
 
-impl DriftWm {
+impl Hordora {
     pub fn new(
         dh: DisplayHandle,
-        loop_handle: LoopHandle<'static, DriftWm>,
+        loop_handle: LoopHandle<'static, Hordora>,
         loop_signal: LoopSignal,
     ) -> Self {
         let compositor_state = CompositorState::new::<Self>(&dh);
@@ -531,27 +531,27 @@ impl DriftWm {
         let layer_shell_state =
             WlrLayerShellState::new_with_filter::<Self, _>(&dh, client_is_unrestricted);
         let foreign_toplevel_state =
-            driftwm::protocols::foreign_toplevel::ForeignToplevelManagerState::new::<Self, _>(
+            hordora::protocols::foreign_toplevel::ForeignToplevelManagerState::new::<Self, _>(
                 &dh,
                 client_is_unrestricted,
             );
         let screencopy_state =
-            driftwm::protocols::screencopy::ScreencopyManagerState::new::<Self, _>(
+            hordora::protocols::screencopy::ScreencopyManagerState::new::<Self, _>(
                 &dh,
                 client_is_unrestricted,
             );
         let image_capture_source_state =
-            driftwm::protocols::image_capture_source::ImageCaptureSourceState::new::<Self, _>(
+            hordora::protocols::image_capture_source::ImageCaptureSourceState::new::<Self, _>(
                 &dh,
                 client_is_unrestricted,
             );
         let image_copy_capture_state =
-            driftwm::protocols::image_copy_capture::ImageCopyCaptureState::new::<Self, _>(
+            hordora::protocols::image_copy_capture::ImageCopyCaptureState::new::<Self, _>(
                 &dh,
                 client_is_unrestricted,
             );
         let output_management_state =
-            driftwm::protocols::output_management::OutputManagementState::new::<Self, _>(
+            hordora::protocols::output_management::OutputManagementState::new::<Self, _>(
                 &dh,
                 client_is_unrestricted,
             );
@@ -702,7 +702,7 @@ impl DriftWm {
             .elements()
             .filter(|w| {
                 !w.wl_surface()
-                    .and_then(|s| driftwm::config::applied_rule(&s))
+                    .and_then(|s| hordora::config::applied_rule(&s))
                     .is_some_and(|r| r.widget)
             })
             .cloned()
@@ -1142,7 +1142,7 @@ impl DriftWm {
         pointer.button(
             self,
             &smithay::input::pointer::ButtonEvent {
-                button: driftwm::config::BTN_MIDDLE,
+                button: hordora::config::BTN_MIDDLE,
                 state: smithay::backend::input::ButtonState::Pressed,
                 serial,
                 time: press_time,
@@ -1154,7 +1154,7 @@ impl DriftWm {
             pointer.button(
                 self,
                 &smithay::input::pointer::ButtonEvent {
-                    button: driftwm::config::BTN_MIDDLE,
+                    button: hordora::config::BTN_MIDDLE,
                     state: smithay::backend::input::ButtonState::Released,
                     serial,
                     time: rt,
@@ -1213,7 +1213,7 @@ impl DriftWm {
                 let os = output_state(output);
                 let size = output_logical_size(output);
                 let visible =
-                    driftwm::canvas::visible_canvas_rect(os.camera.to_i32_round(), size, os.zoom);
+                    hordora::canvas::visible_canvas_rect(os.camera.to_i32_round(), size, os.zoom);
                 drop(os);
                 visible.contains(Point::from((center.x as i32, center.y as i32)))
             })
@@ -1225,7 +1225,7 @@ impl DriftWm {
     pub fn output_in_direction(
         &self,
         from: &Output,
-        dir: &driftwm::config::Direction,
+        dir: &hordora::config::Direction,
     ) -> Option<Output> {
         let from_center: Point<f64, Logical> = {
             let os = output_state(from);
@@ -1291,8 +1291,8 @@ impl DriftWm {
         canvas_pos: Point<f64, Logical>,
         os: &OutputState,
     ) -> Point<f64, Logical> {
-        let screen = driftwm::canvas::canvas_to_screen(
-            driftwm::canvas::CanvasPos(canvas_pos),
+        let screen = hordora::canvas::canvas_to_screen(
+            hordora::canvas::CanvasPos(canvas_pos),
             os.camera,
             os.zoom,
         )
@@ -1314,7 +1314,7 @@ impl DriftWm {
             layout_pos.x - os.layout_position.x as f64,
             layout_pos.y - os.layout_position.y as f64,
         ));
-        driftwm::canvas::screen_to_canvas(driftwm::canvas::ScreenPos(screen), os.camera, os.zoom).0
+        hordora::canvas::screen_to_canvas(hordora::canvas::ScreenPos(screen), os.camera, os.zoom).0
     }
 
     /// Batch-access per-output state under a single mutex lock.
@@ -1454,7 +1454,7 @@ impl DriftWm {
         window
             .wl_surface()
             .filter(|s| self.decorations.contains_key(&s.id()))
-            .map_or(0, |_| driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT)
+            .map_or(0, |_| hordora::config::DecorationConfig::TITLE_BAR_HEIGHT)
     }
 
     /// Visual center of a window, accounting for SSD title bar above content.
@@ -1471,7 +1471,7 @@ impl DriftWm {
     /// Offset a spawn position so it doesn't overlap an existing window.
     /// Walks in diagonal steps (title bar height) until no window is within a few pixels.
     pub fn cascade_position(&self, mut pos: (i32, i32), skip: &Window) -> (i32, i32) {
-        let step = driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT;
+        let step = hordora::config::DecorationConfig::TITLE_BAR_HEIGHT;
         loop {
             let dominated = self.space.elements().any(|w| {
                 w != skip
@@ -1504,7 +1504,7 @@ impl DriftWm {
             .wl_surface()
             .is_some_and(|s| self.decorations.contains_key(&s.id()))
         {
-            driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT as f64
+            hordora::config::DecorationConfig::TITLE_BAR_HEIGHT as f64
         } else {
             0.0
         };
@@ -1522,7 +1522,7 @@ impl DriftWm {
             let bar = w
                 .wl_surface()
                 .filter(|s| self.decorations.contains_key(&s.id()))
-                .map_or(0, |_| driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT);
+                .map_or(0, |_| hordora::config::DecorationConfig::TITLE_BAR_HEIGHT);
             rects.push((
                 loc.x as f64,
                 loc.y as f64 - bar as f64,
@@ -1596,7 +1596,7 @@ impl DriftWm {
         )
     }
 
-    /// Write viewport center + zoom to `$XDG_RUNTIME_DIR/driftwm/state` if changed.
+    /// Write viewport center + zoom to `$XDG_RUNTIME_DIR/hordora/state` if changed.
     /// Atomic: writes to .tmp then renames.
     pub fn write_state_file_if_dirty(&mut self) {
         // Check if any output's camera/zoom changed (not just active output)
@@ -1744,7 +1744,7 @@ impl DriftWm {
 
     /// Hot-reload config from disk. On parse failure, logs an error and keeps the old config.
     pub fn reload_config(&mut self) {
-        let config_path = driftwm::config::config_path();
+        let config_path = hordora::config::config_path();
         let contents = match std::fs::read_to_string(&config_path) {
             Ok(c) => c,
             Err(e) => {
@@ -1755,7 +1755,7 @@ impl DriftWm {
                 return;
             }
         };
-        let mut new_config = match driftwm::config::Config::from_toml(&contents) {
+        let mut new_config = match hordora::config::Config::from_toml(&contents) {
             Ok(c) => c,
             Err(e) => {
                 tracing::error!("Config reload: parse error: {e}");
@@ -1889,9 +1889,9 @@ impl DriftWm {
     }
 
     /// Build snap target rectangles for all windows except `exclude`, skipping widgets.
-    pub fn snap_targets(&self, exclude: &WlSurface) -> (Vec<driftwm::snap::SnapRect>, i32) {
+    pub fn snap_targets(&self, exclude: &WlSurface) -> (Vec<hordora::snap::SnapRect>, i32) {
         let self_bar = if self.decorations.contains_key(&exclude.id()) {
-            driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT
+            hordora::config::DecorationConfig::TITLE_BAR_HEIGHT
         } else {
             0
         };
@@ -1903,7 +1903,7 @@ impl DriftWm {
             if *surface == *exclude {
                 continue;
             }
-            if driftwm::config::applied_rule(&surface).is_some_and(|r| r.widget) {
+            if hordora::config::applied_rule(&surface).is_some_and(|r| r.widget) {
                 continue;
             }
             let Some(loc) = self.space.element_location(w) else {
@@ -1911,11 +1911,11 @@ impl DriftWm {
             };
             let size = w.geometry().size;
             let bar = if self.decorations.contains_key(&surface.id()) {
-                driftwm::config::DecorationConfig::TITLE_BAR_HEIGHT
+                hordora::config::DecorationConfig::TITLE_BAR_HEIGHT
             } else {
                 0
             };
-            others.push(driftwm::snap::SnapRect {
+            others.push(hordora::snap::SnapRect {
                 x_low: loc.x as f64,
                 x_high: loc.x as f64 + size.w as f64,
                 y_low: loc.y as f64 - bar as f64,
@@ -1929,7 +1929,7 @@ impl DriftWm {
 fn state_file_dir() -> Option<std::path::PathBuf> {
     std::env::var("XDG_RUNTIME_DIR")
         .ok()
-        .map(|d| std::path::PathBuf::from(d).join("driftwm"))
+        .map(|d| std::path::PathBuf::from(d).join("hordora"))
 }
 
 /// Remove the state file on compositor exit.
@@ -1984,7 +1984,7 @@ pub fn read_all_per_output_state() -> HashMap<String, (Point<f64, Logical>, f64)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use driftwm::canvas::MomentumState;
+    use hordora::canvas::MomentumState;
 
     fn mock_output_state(
         camera: (f64, f64),
@@ -2014,8 +2014,8 @@ mod tests {
     fn canvas_to_layout_round_trip_zoom_1() {
         let os = mock_output_state((100.0, 200.0), 1.0, (0, 0));
         let canvas = Point::from((150.0, 250.0));
-        let layout = DriftWm::canvas_to_layout_pos(canvas, &os);
-        let back = DriftWm::layout_to_canvas_pos(layout, &os);
+        let layout = Hordora::canvas_to_layout_pos(canvas, &os);
+        let back = Hordora::layout_to_canvas_pos(layout, &os);
         assert!((back.x - canvas.x).abs() < 0.001);
         assert!((back.y - canvas.y).abs() < 0.001);
     }
@@ -2024,8 +2024,8 @@ mod tests {
     fn canvas_to_layout_round_trip_with_zoom() {
         let os = mock_output_state((50.0, 75.0), 2.0, (1920, 0));
         let canvas = Point::from((80.0, 100.0));
-        let layout = DriftWm::canvas_to_layout_pos(canvas, &os);
-        let back = DriftWm::layout_to_canvas_pos(layout, &os);
+        let layout = Hordora::canvas_to_layout_pos(canvas, &os);
+        let back = Hordora::layout_to_canvas_pos(layout, &os);
         assert!((back.x - canvas.x).abs() < 0.001);
         assert!((back.y - canvas.y).abs() < 0.001);
     }
@@ -2037,7 +2037,7 @@ mod tests {
         // layout = screen + layout_position = -100+1920 = 1820, -300+0 = -300
         let os = mock_output_state((100.0, 200.0), 2.0, (1920, 0));
         let canvas = Point::from((50.0, 50.0));
-        let layout = DriftWm::canvas_to_layout_pos(canvas, &os);
+        let layout = Hordora::canvas_to_layout_pos(canvas, &os);
         assert!((layout.x - 1820.0).abs() < 0.001);
         assert!((layout.y - (-300.0)).abs() < 0.001);
     }
@@ -2049,7 +2049,7 @@ mod tests {
         // canvas = screen / zoom + camera = 0 + 500 = 500, 0 + 300 = 300
         let os = mock_output_state((500.0, 300.0), 1.0, (1920, 0));
         let layout = Point::from((1920.0, 0.0));
-        let canvas = DriftWm::layout_to_canvas_pos(layout, &os);
+        let canvas = Hordora::layout_to_canvas_pos(layout, &os);
         assert!((canvas.x - 500.0).abs() < 0.001);
         assert!((canvas.y - 300.0).abs() < 0.001);
     }
@@ -2061,14 +2061,14 @@ mod tests {
 
         let canvas = Point::from((600.0, 300.0));
         // Through output A
-        let layout_a = DriftWm::canvas_to_layout_pos(canvas, &os_a);
-        let back_a = DriftWm::layout_to_canvas_pos(layout_a, &os_a);
+        let layout_a = Hordora::canvas_to_layout_pos(canvas, &os_a);
+        let back_a = Hordora::layout_to_canvas_pos(layout_a, &os_a);
         assert!((back_a.x - canvas.x).abs() < 0.001);
         assert!((back_a.y - canvas.y).abs() < 0.001);
 
         // Through output B
-        let layout_b = DriftWm::canvas_to_layout_pos(canvas, &os_b);
-        let back_b = DriftWm::layout_to_canvas_pos(layout_b, &os_b);
+        let layout_b = Hordora::canvas_to_layout_pos(canvas, &os_b);
+        let back_b = Hordora::layout_to_canvas_pos(layout_b, &os_b);
         assert!((back_b.x - canvas.x).abs() < 0.001);
         assert!((back_b.y - canvas.y).abs() < 0.001);
     }

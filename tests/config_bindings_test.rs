@@ -1,4 +1,4 @@
-use driftwm::config::{Action, Config, Direction};
+use hordora::config::{Action, Config, Direction};
 use smithay::input::keyboard::{keysyms, Keysym, ModifiersState};
 
 // ── Modifier helpers ─────────────────────────────────────────────────────
